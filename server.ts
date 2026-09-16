@@ -143,7 +143,7 @@ async function analyzeBufferWithGemini(
   productTypeHint: 'eyeglass_lens' | 'contact_lens' | 'auto' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-flash-latest'];
+  const modelsToTry = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-flash-latest'];
 
   let adminInstruction = '';
   let detectedListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
