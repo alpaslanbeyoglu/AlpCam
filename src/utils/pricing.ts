@@ -1,6 +1,13 @@
 import { Lens, BrandDiscount, LensFinancials } from '../types';
 import { getDistributorForBrand } from '../data/distributors';
 
+// Global exchange rates memory
+let globalExchangeRates = { EUR: 40.0, USD: 36.0, loaded: false };
+
+export function setGlobalExchangeRates(rates: { EUR: number; USD: number }) {
+  globalExchangeRates = { ...rates, loaded: true };
+}
+
 /**
  * Kademeli / Basamaklı iskonto formülü:
  * Örneğin 40 + 10 iskonto:
@@ -255,12 +262,33 @@ export function sanitizeLens(lens: Lens): Lens {
   const normBrand = normalizeBrandName(lens.brand);
   const isContact = isContactLens({ ...lens, brand: normBrand });
   const finalDistributor = lens.distributor?.trim() || getDistributorForBrand(normBrand, lens.name, lens.distributor);
+  
+  let finalCurrency = lens.currency || 'TRY';
+  // Desio ve Adore gibi markaların listeleri genellikle Euro (EUR) bazlıdır.
+  if (normBrand.toLowerCase() === 'desio' || normBrand.toLowerCase() === 'adore') {
+    finalCurrency = 'EUR';
+  }
+
+  let wPrice = lens.wholesalePrice;
+  let rPrice = lens.retailPrice;
+
+  // Tüm fiyatları otomatik TL'ye (TRY) çevir
+  if (finalCurrency !== 'TRY' && globalExchangeRates.loaded) {
+    const rate = finalCurrency === 'EUR' ? globalExchangeRates.EUR : globalExchangeRates.USD;
+    if (wPrice) wPrice = Math.round(wPrice * rate);
+    if (rPrice) rPrice = Math.round(rPrice * rate);
+    finalCurrency = 'TRY';
+  }
+
   return {
     ...lens,
     brand: normBrand || lens.brand,
     distributor: finalDistributor,
     productType: isContact ? 'contact_lens' : 'eyeglass_lens',
     category: isContact ? 'contact_lens' : lens.category,
+    wholesalePrice: wPrice,
+    retailPrice: rPrice,
+    currency: finalCurrency,
   };
 }
 

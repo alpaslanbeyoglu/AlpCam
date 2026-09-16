@@ -143,7 +143,7 @@ async function analyzeBufferWithGemini(
   productTypeHint: 'eyeglass_lens' | 'contact_lens' | 'auto' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-flash-latest'];
+  const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];
 
   let adminInstruction = '';
   let detectedListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
@@ -182,7 +182,7 @@ KRİTİK GÖREV TALİMATLARI:
 2. TÜRKÇE FİYAT VE PARA BİRİMİ AYRIŞTIRMA (ÇOK ÖNEMLİ):
    - Türkiye fiyat formatında nokta (.) binlik ayıracıdır, virgül (,) ondalık ayıracıdır.
    - Örnek: "2.850,00 TL" -> 2850 (Kesinlikle 2.85 yapma!). "1.200 TL" -> 1200, "750,00" -> 750, "18.500" -> 18500.
-   - Eğer fiyat Euro (€) veya Dolar ($) ise currency alanını "EUR" veya "USD" yap, rakamı tam sayı veya ondalıklı olarak aktar.
+   - DİKKAT: Belgede veya dosya adında "Desio", "Adore", "Euro", "€" veya "$" geçiyorsa, currency alanını KESİNLİKLE "EUR" veya "USD" olarak ayarla. Varsayılan olarak her şeye "TRY" deme! Rakamları tam veya ondalıklı sayı olarak aktar.
    - Eğer liste PERAKENDE (PFL) ise veya tavsiye satış fiyatı içeriyorsa: retailPrice alanını doldur.
    - Eğer liste TOPTAN (TFL) ise veya optisyen alış fiyatı içeriyorsa: wholesalePrice alanını doldur.
 

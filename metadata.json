@@ -2,5 +2,7 @@
   "name": "Optik Cam & Kontakt Lens Fiyat Kataloğu",
   "description": "Gözlükçüler ve optisyenler için gözlük camları ve kontakt lensler, toptan/perakende liste ayrımı, marka iskontoları ve Google Drive senkronizasyonu içeren profesyonel fiyat kataloğu.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

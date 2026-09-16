@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CustomList, CustomListItem, BrandDiscount, Lens } from '../types';
-import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
+import { calculateLensFinancials, formatCurrency, sanitizeLens } from '../utils/pricing';
 import { 
   Plus, Trash2, Share2, Printer, Copy, Check, MessageSquare, 
   FolderPlus, ChevronRight, Edit3, User, Sparkles, ShieldCheck 
@@ -44,7 +44,7 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
     activeList.items.forEach((item) => {
       const q = item.quantity as 1 | 2;
       const fin = calculateLensFinancials(
-        item.lensSnapshot,
+        sanitizeLens(item.lensSnapshot),
         brandDiscounts,
         q,
         item.customRetailPrice
@@ -393,7 +393,7 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
               {activeList.items.map((item, idx) => {
-                const lens = item.lensSnapshot;
+                const lens = sanitizeLens(item.lensSnapshot);
                 const fin = calculateLensFinancials(
                   lens,
                   brandDiscounts,

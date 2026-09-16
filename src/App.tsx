@@ -26,7 +26,7 @@ import {
   saveIsAdminSession,
 } from './utils/storage';
 import { fetchFromDriveUrl, parseExcelOrCsvData } from './utils/driveSync';
-import { sanitizeLens } from './utils/pricing';
+import { sanitizeLens, setGlobalExchangeRates } from './utils/pricing';
 import { getDistributorForBrand, getDistributorInfo } from './data/distributors';
 
 // Components
@@ -41,6 +41,7 @@ import { DriveSyncView } from './components/DriveSyncView';
 import { GithubGuideView } from './components/GithubGuideView';
 import { AddLensModal } from './components/AddLensModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
+import { useExchangeRates } from './hooks/useExchangeRates';
 
 import {
   Plus,
@@ -95,6 +96,14 @@ export default function App() {
   const [isDriveWorking, setIsDriveWorking] = useState(false);
   const [driveWorkingText, setDriveWorkingText] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const exchangeRates = useExchangeRates();
+
+  useEffect(() => {
+    if (!exchangeRates.loading) {
+      setGlobalExchangeRates({ EUR: exchangeRates.EUR, USD: exchangeRates.USD });
+    }
+  }, [exchangeRates]);
 
   // Persistence Effects
   useEffect(() => {
@@ -384,6 +393,7 @@ export default function App() {
     sortBy,
     sphCheck,
     cylCheck,
+    exchangeRates,
   ]);
 
   // Add to active custom list
