@@ -10,6 +10,12 @@ export interface ScanProgress {
   errorMessage?: string;
 }
 
+export interface ScanOptions {
+  priceMode?: 'wholesale' | 'retail' | 'auto';
+  profitMarkup?: number;
+  productTypeHint?: 'eyeglass_lens' | 'contact_lens' | 'auto';
+}
+
 export async function fetchDriveFiles(folderUrl: string = KNOWN_DRIVE_FOLDER_URL): Promise<DriveFolderFileInfo[]> {
   try {
     const res = await fetch(`/api/drive/files?folderUrl=${encodeURIComponent(folderUrl)}`);
@@ -28,7 +34,8 @@ export async function fetchDriveFiles(folderUrl: string = KNOWN_DRIVE_FOLDER_URL
 }
 
 export async function scanSingleDriveFile(
-  file: DriveFolderFileInfo
+  file: DriveFolderFileInfo,
+  options?: ScanOptions
 ): Promise<{ success: boolean; lenses: Lens[]; error?: string }> {
   try {
     const res = await fetch('/api/drive/scan-file', {
@@ -39,6 +46,9 @@ export async function scanSingleDriveFile(
         fileName: file.name,
         mimeType: file.mimeType,
         brandHint: file.brand,
+        priceMode: options?.priceMode || (file.listType === 'toptan' ? 'wholesale' : file.listType === 'perakende' ? 'retail' : 'auto'),
+        profitMarkup: options?.profitMarkup || 2.0,
+        productTypeHint: options?.productTypeHint || 'auto',
       }),
     });
 
@@ -51,7 +61,7 @@ export async function scanSingleDriveFile(
     if (data.success && Array.isArray(data.lenses)) {
       return { success: true, lenses: data.lenses };
     }
-    throw new Error(data.error || 'Cam listesi ayrıştırılamadı.');
+    throw new Error(data.error || 'Ürün listesi ayrıştırılamadı.');
   } catch (err: any) {
     console.error(`Error scanning ${file.name}:`, err);
     return { success: false, lenses: [], error: err.message };
@@ -60,7 +70,8 @@ export async function scanSingleDriveFile(
 
 export async function uploadAndScanDocument(
   file: File,
-  brandHint?: string
+  brandHint?: string,
+  options?: ScanOptions
 ): Promise<{ success: boolean; lenses: Lens[]; error?: string }> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -75,6 +86,9 @@ export async function uploadAndScanDocument(
             fileName: file.name,
             mimeType: file.type || 'application/pdf',
             brandHint,
+            priceMode: options?.priceMode || 'auto',
+            profitMarkup: options?.profitMarkup || 2.0,
+            productTypeHint: options?.productTypeHint || 'auto',
           }),
         });
 

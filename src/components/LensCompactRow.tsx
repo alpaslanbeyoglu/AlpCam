@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lens, BrandDiscount } from '../types';
 import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { Plus, Check, Info } from 'lucide-react';
+import { Plus, Check, Info, Eye, Glasses } from 'lucide-react';
 
 interface LensCompactRowProps {
   lens: Lens;
@@ -23,6 +23,7 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
   isAddedToActiveList,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
+  const isContact = lens.productType === 'contact_lens';
 
   return (
     <div
@@ -35,15 +36,42 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
           <span className="text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200 px-1.5 py-0.2 rounded">
             {lens.brand}
           </span>
-          <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">
-            {lens.index}
-          </span>
+          {isContact ? (
+            <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+              <Eye className="w-3 h-3" />
+              <span>Lens</span>
+            </span>
+          ) : (
+            <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">
+              {lens.index}
+            </span>
+          )}
+          {isContact && lens.wearPeriod && (
+            <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">
+              {lens.wearPeriod}
+            </span>
+          )}
+          {lens.sourceListType && (
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                lens.sourceListType === 'toptan'
+                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                  : lens.sourceListType === 'perakende'
+                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+              }`}
+            >
+              {lens.sourceListType === 'toptan' ? 'TFL' : lens.sourceListType === 'perakende' ? 'PFL' : 'KMP'}
+            </span>
+          )}
           <span className="text-xs font-semibold text-slate-900 truncate">
             {lens.name}
           </span>
         </div>
         <div className="text-[11px] text-slate-500 truncate mt-0.5">
-          {lens.coating} • {lens.sphRange || 'Tüm diyoptriler'}
+          {isContact
+            ? `${lens.boxContent || '6 Adet Kutu'} ${lens.baseCurve ? `• BC: ${lens.baseCurve}` : ''} ${lens.diameter ? `• DIA: ${lens.diameter}` : ''}`
+            : `${lens.coating} • ${lens.sphRange || 'Tüm diyoptriler'}`}
         </div>
       </div>
 

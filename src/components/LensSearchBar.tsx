@@ -1,16 +1,23 @@
 import React from 'react';
-import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
-import { LensCategory } from '../types';
+import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown, Eye, Glasses, Building2 } from 'lucide-react';
+import { LensCategory, ProductType } from '../types';
 
 interface LensSearchBarProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
+  selectedProductType: 'all' | 'eyeglass_lens' | 'contact_lens';
+  setSelectedProductType: (val: 'all' | 'eyeglass_lens' | 'contact_lens') => void;
+  eyeglassCount: number;
+  contactLensCount: number;
+  selectedDistributor?: string;
+  setSelectedDistributor?: (dist: string) => void;
+  availableDistributors?: { name: string; shortName: string; count: number }[];
   selectedBrand: string;
   setSelectedBrand: (brand: string) => void;
-  availableBrands: string[];
+  availableBrands?: string[];
   selectedIndex: string;
   setSelectedIndex: (idx: string) => void;
-  availableIndices: string[];
+  availableIndices?: string[];
   selectedCategory: string;
   setSelectedCategory: (cat: string) => void;
   selectedDelivery: 'all' | 'stock' | 'rx';
@@ -29,8 +36,8 @@ interface LensSearchBarProps {
   onResetFilters: () => void;
 }
 
-const CATEGORIES: { id: string; label: string }[] = [
-  { id: 'all', label: 'Tüm Tipler' },
+const EYEGLASS_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'all', label: 'Tüm Cam Tipleri' },
   { id: 'single_vision', label: 'Tek Odaklı' },
   { id: 'progressive', label: 'Progresif' },
   { id: 'office', label: 'Ofis / Dijital' },
@@ -40,15 +47,30 @@ const CATEGORIES: { id: string; label: string }[] = [
   { id: 'drive', label: 'Sürüş Camı' },
 ];
 
+const CONTACT_LENS_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'all', label: 'Tüm Lens Tipleri' },
+  { id: 'single_vision', label: 'Sferik Lensler' },
+  { id: 'custom_rx', label: 'Torik (Astigmatlı)' },
+  { id: 'progressive', label: 'Multifokal (Uzak-Yakın)' },
+  { id: 'photochromic', label: 'Renkli Kozmetik' },
+];
+
 export const LensSearchBar: React.FC<LensSearchBarProps> = ({
   searchTerm,
   setSearchTerm,
+  selectedProductType,
+  setSelectedProductType,
+  eyeglassCount,
+  contactLensCount,
+  selectedDistributor = 'all',
+  setSelectedDistributor = (_dist: string) => {},
+  availableDistributors = [],
   selectedBrand,
   setSelectedBrand,
-  availableBrands,
+  availableBrands = [],
   selectedIndex,
   setSelectedIndex,
-  availableIndices,
+  availableIndices = [],
   selectedCategory,
   setSelectedCategory,
   selectedDelivery,
@@ -68,6 +90,8 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
 }) => {
   const hasActiveFilters =
     searchTerm !== '' ||
+    selectedProductType !== 'all' ||
+    selectedDistributor !== 'all' ||
     selectedBrand !== 'all' ||
     selectedIndex !== 'all' ||
     selectedCategory !== 'all' ||
@@ -75,9 +99,95 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
     sphCheck !== '' ||
     cylCheck !== '';
 
+  const activeCategories =
+    selectedProductType === 'contact_lens' ? CONTACT_LENS_CATEGORIES : EYEGLASS_CATEGORIES;
+
   return (
     <div className="bg-white border-b border-slate-200 px-3 sm:px-4 py-3 space-y-2.5">
-      {/* Search Input and View Switch */}
+      {/* Top Product Type Separation Tabs (Cam vs Kontakt Lens) */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+          <button
+            onClick={() => setSelectedProductType('all')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              selectedProductType === 'all'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>Tüm Ürünler</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-slate-200/80 text-[10px] text-slate-700">
+              {eyeglassCount + contactLensCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSelectedProductType('eyeglass_lens')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              selectedProductType === 'eyeglass_lens'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-blue-700'
+            }`}
+          >
+            <Glasses className="w-3.5 h-3.5" />
+            <span>Gözlük Camları</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                selectedProductType === 'eyeglass_lens'
+                  ? 'bg-blue-700 text-white'
+                  : 'bg-slate-200/80 text-slate-700'
+              }`}
+            >
+              {eyeglassCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSelectedProductType('contact_lens')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              selectedProductType === 'contact_lens'
+                ? 'bg-teal-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-teal-700'
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>Kontakt Lensler</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                selectedProductType === 'contact_lens'
+                  ? 'bg-teal-700 text-white'
+                  : 'bg-slate-200/80 text-slate-700'
+              }`}
+            >
+              {contactLensCount}
+            </span>
+          </button>
+        </div>
+
+        {/* View Mode (Cards vs Compact Table) */}
+        <div className="hidden xs:flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+          <button
+            onClick={() => setViewMode('cards')}
+            className={`p-1.5 rounded-lg text-xs font-medium transition ${
+              viewMode === 'cards' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+            }`}
+            title="Kart Görünümü"
+          >
+            <span className="text-xs font-semibold px-1">Kart</span>
+          </button>
+          <button
+            onClick={() => setViewMode('compact')}
+            className={`p-1.5 rounded-lg text-xs font-medium transition ${
+              viewMode === 'compact' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+            }`}
+            title="Kompakt Liste"
+          >
+            <span className="text-xs font-semibold px-1">Liste</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Search Input and Advanced Filter Toggle */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -87,7 +197,11 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cam adı, marka, kaplama veya indeks ara (örn: zeiss 1.60, prevencia, crizal)..."
+            placeholder={
+              selectedProductType === 'contact_lens'
+                ? 'Kontakt lens adı, marka, dağıtıcı (Lens Medikal, CooperVision, Opsa), BC, kutu ara...'
+                : 'Cam veya lens adı, marka, dağıtıcı (HOYA/Seiko, Beta Optik, Zeiss, Lens Medikal), indeks ara...'
+            }
             className="w-full pl-9 pr-9 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 text-sm focus:outline-hidden focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
           />
           {searchTerm && (
@@ -113,28 +227,57 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
           <SlidersHorizontal className="w-4 h-4" />
           <span className="hidden sm:inline">Filtreler</span>
         </button>
+      </div>
 
-        {/* View Mode (Cards vs Compact Table) */}
-        <div className="hidden xs:flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+      {/* ÜST DAĞITICI / DİSTRİBÜTÖR FİRMALAR (Lens Medikal, HOYA & Seiko, Beta Optik, Zeiss, Opsa vb.) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 bg-slate-50/70 p-1.5 rounded-xl border border-slate-200/60">
+        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider pl-1 flex items-center gap-1 whitespace-nowrap">
+          <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Dağıtıcı / Üst Firma:</span>
+        </span>
+        <button
+          onClick={() => {
+            setSelectedDistributor('all');
+            setSelectedBrand('all');
+            setSelectedIndex('all');
+            setSelectedCategory('all');
+          }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+            selectedDistributor === 'all'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+          }`}
+        >
+          Tüm Dağıtıcılar
+        </button>
+        {availableDistributors.map((dist) => (
           <button
-            onClick={() => setViewMode('cards')}
-            className={`p-1.5 rounded-lg text-xs font-medium transition ${
-              viewMode === 'cards' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+            key={dist.name}
+            onClick={() => {
+              setSelectedDistributor(selectedDistributor === dist.name ? 'all' : dist.name);
+              setSelectedBrand('all');
+              setSelectedIndex('all');
+              setSelectedCategory('all');
+            }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 border ${
+              selectedDistributor === dist.name
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200/90 hover:bg-indigo-50 hover:text-indigo-900 hover:border-indigo-200'
             }`}
-            title="Kart Görünümü"
+            title={dist.name}
           >
-            <span className="text-xs font-semibold px-1">Kart</span>
+            <span>{dist.shortName || dist.name}</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                selectedDistributor === dist.name
+                  ? 'bg-indigo-700 text-white'
+                  : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {dist.count}
+            </span>
           </button>
-          <button
-            onClick={() => setViewMode('compact')}
-            className={`p-1.5 rounded-lg text-xs font-medium transition ${
-              viewMode === 'compact' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
-            }`}
-            title="Kompakt Liste"
-          >
-            <span className="text-xs font-semibold px-1">Liste</span>
-          </button>
-        </div>
+        ))}
       </div>
 
       {/* Brand Chips Carousel */}
@@ -153,7 +296,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
         {availableBrands.map((brand) => (
           <button
             key={brand}
-            onClick={() => setSelectedBrand(brand)}
+            onClick={() => setSelectedBrand(selectedBrand === brand ? 'all' : brand)}
             className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
               selectedBrand === brand
                 ? 'bg-sky-600 text-white shadow-xs'
@@ -167,35 +310,39 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
 
       {/* Index and Category Chips */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-1">İndeks:</span>
-        <button
-          onClick={() => setSelectedIndex('all')}
-          className={`px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap transition ${
-            selectedIndex === 'all'
-              ? 'bg-slate-800 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Tümü
-        </button>
-        {availableIndices.map((idx) => (
-          <button
-            key={idx}
-            onClick={() => setSelectedIndex(idx)}
-            className={`px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap transition ${
-              selectedIndex === idx
-                ? 'bg-sky-700 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {idx}
-          </button>
-        ))}
+        {selectedProductType !== 'contact_lens' && (
+          <>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-1">İndeks:</span>
+            <button
+              onClick={() => setSelectedIndex('all')}
+              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap transition ${
+                selectedIndex === 'all'
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Tümü
+            </button>
+            {availableIndices.map((idx) => (
+              <button
+                key={idx}
+                onClick={() => setSelectedIndex(idx)}
+                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap transition ${
+                  selectedIndex === idx
+                    ? 'bg-sky-700 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {idx}
+              </button>
+            ))}
 
-        <span className="text-slate-300 mx-1">|</span>
+            <span className="text-slate-300 mx-1">|</span>
+          </>
+        )}
 
         {/* Category Pills */}
-        {CATEGORIES.map((cat) => (
+        {activeCategories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setSelectedCategory(cat.id)}
@@ -279,7 +426,16 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
       {/* Results Count and Active Filter Reset */}
       <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
         <div>
-          <span>{totalMatches} cam bulundu</span>
+          <span>{totalMatches} ürün listeleniyor</span>
+          {selectedProductType === 'eyeglass_lens' && (
+            <span className="font-semibold text-blue-700"> • Sadece Gözlük Camları</span>
+          )}
+          {selectedProductType === 'contact_lens' && (
+            <span className="font-semibold text-teal-700"> • Sadece Kontakt Lensler</span>
+          )}
+          {selectedDistributor !== 'all' && (
+            <span className="font-semibold text-indigo-700"> • Dağıtıcı: {selectedDistributor}</span>
+          )}
           {selectedBrand !== 'all' && <span className="font-semibold text-slate-700"> • {selectedBrand}</span>}
           {selectedIndex !== 'all' && <span className="font-semibold text-slate-700"> • {selectedIndex} İndeks</span>}
         </div>

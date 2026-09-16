@@ -12,6 +12,7 @@ interface NavbarProps {
   lastSyncTime?: string;
   onQuickSync?: () => void;
   isSyncing?: boolean;
+  isDriveWorking?: boolean;
   isAdmin: boolean;
   onOpenAdminModal: () => void;
 }
@@ -26,6 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   customListCount,
   onQuickSync,
   isSyncing,
+  isDriveWorking,
   isAdmin,
   onOpenAdminModal,
 }) => {
@@ -97,15 +99,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => setActiveTab('catalog')} 
           className="flex items-center gap-2 cursor-pointer select-none"
         >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-500 flex items-center justify-center text-white shadow-sm shadow-sky-500/20">
-            {/* Minimalist Glasses Icon */}
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="6" cy="14" r="4" />
-              <circle cx="18" cy="14" r="4" />
-              <path d="M10 14h4" />
-              <path d="M6 10l3-5" />
-              <path d="M18 10l-3-5" />
-            </svg>
+          <div className="w-9 h-9 rounded-xl shadow-sm overflow-hidden shrink-0">
+            <img src="/logo.svg" alt="OptikCam Logo" className="w-full h-full object-cover" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
@@ -239,15 +234,23 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('drive_sync')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
             activeTab === 'drive_sync'
               ? 'bg-sky-600 text-white shadow-xs'
+              : isDriveWorking
+              ? 'bg-amber-50 text-amber-900 border border-amber-300'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <Cloud className="w-3.5 h-3.5 text-amber-500" />
+          <Cloud className={`w-3.5 h-3.5 ${isDriveWorking ? 'text-amber-600 animate-pulse' : 'text-amber-500'}`} />
           <span>Google Drive</span>
-          {!isAdmin && <Lock className="w-3 h-3 text-amber-600 shrink-0" />}
+          {isDriveWorking && (
+            <span className="flex items-center gap-1 bg-amber-200 text-amber-900 text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-ping" />
+              <span>İşlem Sürüyor</span>
+            </span>
+          )}
+          {!isDriveWorking && !isAdmin && <Lock className="w-3 h-3 text-amber-600 shrink-0" />}
         </button>
 
         <button

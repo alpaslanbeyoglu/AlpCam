@@ -1,3 +1,5 @@
+export type ProductType = 'eyeglass_lens' | 'contact_lens';
+
 export type LensCategory = 
   | 'single_vision' // Tek Odaklı
   | 'progressive'   // Progresif
@@ -6,32 +8,43 @@ export type LensCategory =
   | 'sun_polarized' // Güneş / Polarize
   | 'photochromic'  // Fotokromik (Transitions)
   | 'drive'         // Sürüş Camı
-  | 'custom_rx';    // Özel Üretim
+  | 'custom_rx'     // Özel Üretim
+  | 'contact_lens'; // Kontakt Lens
 
 export type LensIndex = '1.50' | '1.53' | '1.56' | '1.59' | '1.60' | '1.67' | '1.74' | '1.80' | '1.90';
 
 export interface Lens {
   id: string;
-  brand: string;            // Marka (Essilor, Zeiss, Shamir, Hoya, Kodak, Novax, vb.)
-  name: string;             // Model / Ürün Adı (örn: Varilux Comfort Max 1.60 Crizal Sapphire HR)
+  distributor?: string;     // Dağıtıcı / Üst Firma / Distribütör (örn: Lens Medikal, HOYA Vision Care & Seiko, Carl Zeiss Vision, Beta Optik (Novax), Opsa Optik, CooperVision Türkiye)
+  brand: string;            // Marka (Essilor, Zeiss, Shamir, Hoya, Kodak, Novax, CooperVision, vb.)
+  name: string;             // Model / Ürün Adı (örn: Varilux Comfort Max veya Biofinity XR)
+  productType?: ProductType;// Ürün Türü: 'eyeglass_lens' (Gözlük Camı) veya 'contact_lens' (Kontakt Lens)
   category: LensCategory;   // Kategori
-  index: string;            // Kırılma İndeksi (1.50, 1.56, 1.60, 1.67, 1.74)
-  material: string;         // Hammadde (Organik CR-39, Polikarbon, MR-8, Trivex, vb.)
-  coating: string;          // Kaplama (Antirefle, Blue Cut, Crizal, DuraVision, vb.)
+  index: string;            // Kırılma İndeksi (1.50, 1.56, 1.60, 1.67, 1.74) veya Kontakt Lens BC/Özellik
+  material: string;         // Hammadde (Organik CR-39, MR-8, Silikon Hidrojel, vb.)
+  coating: string;          // Kaplama veya Yüzey Teknolojisi (Antirefle, Crizal, Aquaform, vb.)
   wholesalePrice: number;   // TOPTAN Liste Fiyatı (Alış - KDV hariç veya dahil liste fiyatı)
   retailPrice: number;      // PERAKENDE Tavsiye Edilen Satış Fiyatı (Müşteri liste fiyatı)
   currency: 'TRY' | 'USD' | 'EUR';
-  sphRange?: string;        // Sferik Aralık (örn: -6.00 / +6.00)
+  sphRange?: string;        // Sferik Aralık (örn: -6.00 / +6.00 veya -12.00 / +8.00)
   cylMax?: number;          // Maksimum Silindirik (örn: 2.00 veya 4.00)
-  diameter?: string;        // Çap (örn: 65/70/75)
-  deliveryType: 'stock' | 'rx'; // Stok Cam (Aynı gün) vs RX Özel Üretim (3-5 gün)
+  diameter?: string;        // Çap / DIA (örn: 65/70/75 veya 14.2)
+  baseCurve?: string;       // Temel Eğri / BC (Kontakt Lensler için örn: 8.4, 8.6, 8.8)
+  boxContent?: string;      // Kutu İçeriği (örn: 6'lı Kutu, 30'lu Kutu, Tek Şişe)
+  wearPeriod?: 'daily' | 'monthly' | 'yearly' | 'fortnightly'; // Değişim Sıklığı: Günlük, Aylık, Yıllık, 15 Günlük
+  lensType?: 'spheric' | 'toric' | 'multifocal' | 'color'; // Kontakt Lens Tipi: Sferik, Torik (Astigmat), Multifokal, Renkli
+  deliveryType: 'stock' | 'rx'; // Stok Cam/Lens (Aynı gün) vs RX Özel Üretim (3-5 gün)
   notes?: string;           // Açıklama / Özellikler
-  isCustom?: boolean;       // Kullanıcı tarafından eklenen özel cam
+  isCustom?: boolean;       // Kullanıcı tarafından eklenen özel ürün
+  sourceFileId?: string;    // Geldiği Drive dosya ID'si
+  sourceFileName?: string;  // Geldiği PDF/Katalog dosya adı
+  sourceListType?: 'perakende' | 'toptan' | 'kampanya' | 'genel'; // Liste tipi (PFL, TFL, Kampanya)
   updatedAt?: string;
 }
 
 export interface BrandDiscount {
   brand: string;
+  distributor?: string;    // Bağlı olduğu Üst Dağıtıcı Firma (örn: Lens Medikal, HOYA Vision Care & Seiko)
   discount1: number;       // 1. İskonto yüzdesi (örn: %45)
   discount2?: number;      // 2. Kademeli İskonto yüzdesi (örn: +%10)
   categoryOverrides?: Record<string, { discount1: number; discount2?: number }>;

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers } from 'lucide-react';
+import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers, Eye, Glasses, Package, Building2 } from 'lucide-react';
+import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 
 interface LensCardProps {
   lens: Lens;
@@ -22,17 +23,21 @@ const BRAND_COLORS: Record<string, { bg: string; text: string; border: string }>
   novax: { bg: 'bg-violet-50', text: 'text-violet-800', border: 'border-violet-200' },
   seiko: { bg: 'bg-rose-50', text: 'text-rose-800', border: 'border-rose-200' },
   visionart: { bg: 'bg-teal-50', text: 'text-teal-800', border: 'border-teal-200' },
+  coopervision: { bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-200' },
+  alcon: { bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-200' },
+  'bausch & lomb': { bg: 'bg-cyan-50', text: 'text-cyan-800', border: 'border-cyan-200' },
+  'johnson & johnson': { bg: 'bg-sky-50', text: 'text-sky-800', border: 'border-sky-200' },
 };
 
 const CATEGORY_NAMES: Record<string, string> = {
-  single_vision: 'Tek Odaklı',
-  progressive: 'Progresif',
+  single_vision: 'Tek Odaklı / Sferik',
+  progressive: 'Progresif / Multifokal',
   office: 'Ofis / Dijital',
   bifocal: 'Bifokal',
-  photochromic: 'Fotokromik',
+  photochromic: 'Fotokromik / Renkli',
   sun_polarized: 'Güneş / Polarize',
   drive: 'Sürüş Camı',
-  custom_rx: 'Özel Üretim RX',
+  custom_rx: 'Özel Üretim / Torik',
 };
 
 export const LensCard: React.FC<LensCardProps> = ({
@@ -52,6 +57,10 @@ export const LensCard: React.FC<LensCardProps> = ({
     border: 'border-slate-200',
   };
 
+  const isContact = lens.productType === 'contact_lens';
+  const distributorName = lens.distributor || getDistributorForBrand(lens.brand, lens.name);
+  const distributorInfo = distributorName ? getDistributorInfo(distributorName) : undefined;
+
   return (
     <div
       id={`lens-card-${lens.id}`}
@@ -67,17 +76,70 @@ export const LensCard: React.FC<LensCardProps> = ({
             >
               {lens.brand}
             </span>
-            <span className="bg-slate-100 text-slate-700 text-xs font-semibold px-2 py-0.5 rounded-md">
-              {lens.index} İndeks
-            </span>
+
+            {/* Üst Dağıtıcı / Distribütör Badge */}
+            {distributorName && (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                  distributorInfo?.badgeColor || 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                }`}
+                title={`Ana Dağıtıcı / Üst Firma: ${distributorName}`}
+              >
+                <Building2 className="w-2.5 h-2.5 shrink-0" />
+                <span>{distributorInfo?.shortName || distributorName}</span>
+              </span>
+            )}
+
+            {/* Product Type Indicator */}
+            {isContact ? (
+              <span className="bg-teal-50 text-teal-700 text-[11px] font-bold px-2 py-0.5 rounded-md border border-teal-200 flex items-center gap-1">
+                <Eye className="w-3 h-3" />
+                <span>Kontakt Lens</span>
+              </span>
+            ) : (
+              <span className="bg-blue-50 text-blue-700 text-[11px] font-semibold px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1">
+                <Glasses className="w-3 h-3" />
+                <span>Cam</span>
+              </span>
+            )}
+
+            {/* Technical parameter: Index for eyeglass, Wear period for contact lens */}
+            {isContact ? (
+              lens.wearPeriod && (
+                <span className="bg-slate-100 text-slate-700 text-xs font-semibold px-2 py-0.5 rounded-md">
+                  {lens.wearPeriod}
+                </span>
+              )
+            ) : (
+              <span className="bg-slate-100 text-slate-700 text-xs font-semibold px-2 py-0.5 rounded-md">
+                {lens.index} İndeks
+              </span>
+            )}
+
             <span className="bg-slate-50 text-slate-600 text-[11px] px-2 py-0.5 rounded-md border border-slate-100">
               {CATEGORY_NAMES[lens.category] || lens.category}
             </span>
+
+            {/* List Type Badge */}
+            {lens.sourceListType && (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                  lens.sourceListType === 'toptan'
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                    : lens.sourceListType === 'perakende'
+                    ? 'bg-purple-50 text-purple-800 border-purple-200'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+                title="Liste Tipi"
+              >
+                {lens.sourceListType === 'toptan' ? 'TFL' : lens.sourceListType === 'perakende' ? 'PFL' : 'KMP'}
+              </span>
+            )}
           </div>
 
           {/* Delivery tag */}
           <span
-            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 ${
+            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0 ${
               lens.deliveryType === 'stock'
                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                 : 'bg-purple-50 text-purple-700 border border-purple-200'
@@ -96,16 +158,43 @@ export const LensCard: React.FC<LensCardProps> = ({
           {lens.name}
         </h3>
 
-        {/* Features / Coating / Material */}
+        {/* Features / Coating / Contact Lens Specs */}
         <div className="text-xs text-slate-500 space-y-1">
-          <div className="flex items-center gap-1 text-slate-700 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-            <span className="truncate">{lens.coating}</span>
-          </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span>{lens.material}</span>
-            {lens.sphRange && <span>Diyoptri: {lens.sphRange}</span>}
-          </div>
+          {isContact ? (
+            /* Contact Lens Specific Spec Line */
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                <Package className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                <span className="truncate">{lens.boxContent || '6 Adet / Kutu'}</span>
+                {lens.baseCurve && (
+                  <span className="text-[11px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                    BC: {lens.baseCurve}
+                  </span>
+                )}
+                {lens.diameter && (
+                  <span className="text-[11px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                    DIA: {lens.diameter}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>{lens.material || 'Silikon Hidrojel'}</span>
+                {lens.sphRange && <span>Diyoptri: {lens.sphRange}</span>}
+              </div>
+            </div>
+          ) : (
+            /* Optical Eyeglass Lens Spec Line */
+            <>
+              <div className="flex items-center gap-1 text-slate-700 font-medium">
+                <Sparkles className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                <span className="truncate">{lens.coating}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>{lens.material}</span>
+                {lens.sphRange && <span>Diyoptri: {lens.sphRange}</span>}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -115,7 +204,13 @@ export const LensCard: React.FC<LensCardProps> = ({
           /* MÜŞTERİ MODU: SADECE PERAKENDE FİYAT GÖRÜNÜR */
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>Tavsiye Edilen Satış ({pairCount === 2 ? 'Çift Cam' : 'Tek Cam'}):</span>
+              <span>
+                {isContact
+                  ? pairCount === 2
+                    ? '2 Kutu (Sağ + Sol) Satış:'
+                    : '1 Kutu Tavsiye Satış:'
+                  : `Tavsiye Satış (${pairCount === 2 ? 'Çift Cam' : 'Tek Cam'}):`}
+              </span>
               <span className="text-[11px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 py-0.5 rounded">
                 KDV Dahil
               </span>
@@ -153,7 +248,13 @@ export const LensCard: React.FC<LensCardProps> = ({
                   </span>
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">
-                  {pairCount === 2 ? 'Çift cam net maliyet' : 'Tek cam net maliyet'}
+                  {isContact
+                    ? pairCount === 2
+                      ? '2 Kutu net alış maliyeti'
+                      : '1 Kutu net alış maliyeti'
+                    : pairCount === 2
+                    ? 'Çift cam net maliyet'
+                    : 'Tek cam net maliyet'}
                 </div>
               </div>
 
@@ -202,7 +303,7 @@ export const LensCard: React.FC<LensCardProps> = ({
           <button
             onClick={() => onOpenDetails(lens)}
             className="p-2 rounded-xl border border-slate-300 hover:bg-white text-slate-700 transition"
-            title="Cam Detayı & Reçete Uyumu"
+            title="Ürün Detayı & Reçete Uyumu"
           >
             <Info className="w-4 h-4" />
           </button>

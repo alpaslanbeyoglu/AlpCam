@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders } from 'lucide-react';
+import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink } from 'lucide-react';
+import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 
 interface LensDetailModalProps {
   lens: Lens | null;
@@ -32,6 +33,9 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
 
   const customPrice = customPriceInput ? parseFloat(customPriceInput) : undefined;
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount, customPrice);
+  const isContact = lens.productType === 'contact_lens';
+  const distributorName = lens.distributor || getDistributorForBrand(lens.brand, lens.name);
+  const distributorInfo = distributorName ? getDistributorInfo(distributorName) : undefined;
 
   const handleAdd = () => {
     if (!selectedListId && customLists.length > 0) {
@@ -50,17 +54,50 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-4 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-800 uppercase">
               {lens.brand}
             </span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
-              {lens.index} İndeks
-            </span>
+
+            {distributorName && (
+              <span
+                className={`text-xs font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+                  distributorInfo?.badgeColor || 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                }`}
+                title={`Üst Dağıtıcı / Distribütör: ${distributorName}`}
+              >
+                <Building2 className="w-3 h-3" />
+                <span>{distributorInfo?.shortName || distributorName}</span>
+              </span>
+            )}
+
+            {isContact ? (
+              <>
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-teal-100 text-teal-800 flex items-center gap-1">
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Kontakt Lens</span>
+                </span>
+                {lens.wearPeriod && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                    {lens.wearPeriod}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 flex items-center gap-1">
+                  <Glasses className="w-3.5 h-3.5" />
+                  <span>Gözlük Camı</span>
+                </span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                  {lens.index} İndeks
+                </span>
+              </>
+            )}
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -74,31 +111,111 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
               {lens.name}
             </h2>
             <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-sky-50 border border-sky-100 p-2 rounded-xl">
-              <Sparkles className="w-4 h-4 text-sky-600 shrink-0" />
-              <span>{lens.coating}</span>
+              {isContact ? (
+                <>
+                  <Package className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>{lens.boxContent || 'Kutu İçi: 6 Adet'} • {lens.material || 'Silikon Hidrojel'}</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span>{lens.coating}</span>
+                </>
+              )}
             </div>
           </div>
 
+          {/* Distributor / Parent Company Card */}
+          {distributorName && (
+            <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3 text-xs">
+              <div className="flex items-center justify-between font-bold text-indigo-950 mb-1">
+                <span className="flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 text-indigo-600" />
+                  <span>Dağıtıcı / Distribütör Üst Firma</span>
+                </span>
+                <span className="text-[11px] font-semibold text-indigo-700 bg-white px-2 py-0.5 rounded-full border border-indigo-200">
+                  {distributorInfo?.country || 'Türkiye'}
+                </span>
+              </div>
+              <p className="text-indigo-900 font-medium">
+                {distributorInfo?.name || distributorName}
+              </p>
+              {distributorInfo?.description && (
+                <p className="text-indigo-700/80 text-[11px] mt-0.5">
+                  {distributorInfo.description}
+                </p>
+              )}
+              {distributorInfo?.brands && distributorInfo.brands.length > 1 && (
+                <div className="mt-2 pt-2 border-t border-indigo-200/60 flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] font-semibold text-indigo-800">Grup / Dağıtılan Markalar:</span>
+                  {distributorInfo.brands.map((b) => (
+                    <span
+                      key={b}
+                      className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
+                        b.toLowerCase() === lens.brand.toLowerCase()
+                          ? 'bg-indigo-600 text-white font-bold'
+                          : 'bg-white text-indigo-900 border border-indigo-200'
+                      }`}
+                    >
+                      {b}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Technical Specs Grid */}
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-              <span className="text-slate-400 block text-[10px] font-semibold uppercase">Hammadde</span>
-              <span className="font-semibold text-slate-800">{lens.material}</span>
-            </div>
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-              <span className="text-slate-400 block text-[10px] font-semibold uppercase">Teslimat / Stok</span>
-              <span className="font-semibold text-slate-800">
-                {lens.deliveryType === 'stock' ? 'Stok (Aynı Gün)' : 'RX Özel Üretim (3-5 İş Günü)'}
-              </span>
-            </div>
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-              <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik (SPH)</span>
-              <span className="font-semibold text-slate-800">{lens.sphRange || 'Standart üretim'}</span>
-            </div>
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-              <span className="text-slate-400 block text-[10px] font-semibold uppercase">Maks Silindirik (CYL)</span>
-              <span className="font-semibold text-slate-800">± {lens.cylMax ?? 2.00} Dpt</span>
-            </div>
+            {isContact ? (
+              <>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Kullanım Süresi</span>
+                  <span className="font-semibold text-slate-800">{lens.wearPeriod || 'Aylık'}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Kutu Ambalajı</span>
+                  <span className="font-semibold text-slate-800">{lens.boxContent || '6 Adet / Kutu'}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Temel Eğri (BC)</span>
+                  <span className="font-semibold text-slate-800">{lens.baseCurve ? `${lens.baseCurve} mm` : '8.60 mm'}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Çap (DIA)</span>
+                  <span className="font-semibold text-slate-800">{lens.diameter ? `${lens.diameter} mm` : '14.20 mm'}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik (SPH)</span>
+                  <span className="font-semibold text-slate-800">{lens.sphRange || '-0.50 / -10.00'}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Materyal / Su Oranı</span>
+                  <span className="font-semibold text-slate-800">{lens.material || '%48 Su / Silikon Hidrojel'}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Hammadde</span>
+                  <span className="font-semibold text-slate-800">{lens.material}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Teslimat / Stok</span>
+                  <span className="font-semibold text-slate-800">
+                    {lens.deliveryType === 'stock' ? 'Stok (Aynı Gün)' : 'RX Özel Üretim (3-5 İş Günü)'}
+                  </span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik (SPH)</span>
+                  <span className="font-semibold text-slate-800">{lens.sphRange || 'Standart üretim'}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Maks Silindirik (CYL)</span>
+                  <span className="font-semibold text-slate-800">± {lens.cylMax ?? 2.00} Dpt</span>
+                </div>
+              </>
+            )}
           </div>
 
           {lens.notes && (
@@ -111,7 +228,15 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
           {/* Pricing & Profit Simulator */}
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 text-white px-3.5 py-2 text-xs font-semibold flex items-center justify-between">
-              <span>{pairCount === 2 ? 'Çift Cam (2x) Fiyat Özeti' : 'Tek Cam (1x) Fiyat Özeti'}</span>
+              <span>
+                {isContact
+                  ? pairCount === 2
+                    ? '2 Kutu Lens Fiyat Özeti'
+                    : '1 Kutu Lens Fiyat Özeti'
+                  : pairCount === 2
+                  ? 'Çift Cam (2x) Fiyat Özeti'
+                  : 'Tek Cam (1x) Fiyat Özeti'}
+              </span>
               {!isCustomerMode && (
                 <span className="text-emerald-400 font-bold">
                   Net Kar: %{fin.profitMarginPercent}
@@ -128,7 +253,7 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                     {formatCurrency(fin.retailPrice, lens.currency)}
                   </div>
                   <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full inline-block font-semibold">
-                    KDV Dahil • Orijinal Garanti Sertifikalı
+                    KDV Dahil • Orijinal Barkodlu Ürün
                   </span>
                 </div>
               ) : (
@@ -218,7 +343,7 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
               >
                 {customLists.map((list) => (
                   <option key={list.id} value={list.id}>
-                    {list.name} ({list.items.length} cam)
+                    {list.name} ({list.items.length} ürün)
                   </option>
                 ))}
               </select>

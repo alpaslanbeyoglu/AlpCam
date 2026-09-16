@@ -16,6 +16,8 @@ import {
   exportLensesToExcel,
   parseExcelOrCsvData,
 } from '../utils/driveSync';
+import { isContactLens } from '../utils/pricing';
+import { getDistributorForBrand, getDistributorInfo, DISTRIBUTORS_LIST } from '../data/distributors';
 import {
   Cloud,
   FileText,
@@ -44,6 +46,10 @@ import {
   ArrowDownToLine,
   RotateCcw,
   Plus,
+  SlidersHorizontal,
+  Building2,
+  Percent,
+  Database,
 } from 'lucide-react';
 
 interface DriveSyncViewProps {
@@ -54,6 +60,7 @@ interface DriveSyncViewProps {
   onResetToDefaultCatalog: () => void;
   isAdmin: boolean;
   onOpenAdminModal: () => void;
+  onScanningStatusChange?: (isBusy: boolean, statusText?: string) => void;
 }
 
 export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
@@ -64,14 +71,22 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   onResetToDefaultCatalog,
   isAdmin,
   onOpenAdminModal,
+  onScanningStatusChange,
 }) => {
   // Folder & File state
   const [folderUrl, setFolderUrl] = useState<string>(config.sourceUrl || KNOWN_DRIVE_FOLDER_URL);
   const [driveFiles, setDriveFiles] = useState<DriveFolderFileInfo[]>(KNOWN_DRIVE_FILES);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [fileFilterBrand, setFileFilterBrand] = useState<string>('all');
+  const [fileFilterDistributor, setFileFilterDistributor] = useState<string>('all');
   const [fileFilterFormat, setFileFilterFormat] = useState<string>('all');
   const [fileSearchTerm, setFileSearchTerm] = useState('');
+  const [fileTypeTab, setFileTypeTab] = useState<'all' | 'eyeglass' | 'contact' | 'toptan' | 'perakende'>('all');
+
+  // Admin Price Mode & Product Type decision state
+  const [adminPriceMode, setAdminPriceMode] = useState<'auto' | 'wholesale' | 'retail'>('auto');
+  const [profitMarkup, setProfitMarkup] = useState<number>(2.0);
+  const [productTypeHint, setProductTypeHint] = useState<'auto' | 'eyeglass_lens' | 'contact_lens'>('auto');
 
   // Scanning state
   const [scanningFileId, setScanningFileId] = useState<string | null>(null);
@@ -96,6 +111,10 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
+  // System memory stats
+  const memoryEyeglassCount = lenses.filter((l) => !isContactLens(l)).length;
+  const memoryContactCount = lenses.filter((l) => isContactLens(l)).length;
+
   // Load drive files on mount or when folderUrl changes
   useEffect(() => {
     let isMounted = true;
@@ -113,37 +132,135 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     };
   }, [folderUrl]);
 
+  // Notify parent of background work so other tabs stay aware
+  useEffect(() => {
+    if (!onScanningStatusChange) return;
+    if (isBatchScanning) {
+      onScanningStatusChange(
+        true,
+        `Drive taranıyor (${batchProgress.current}/${batchProgress.total}): ${batchProgress.filename || 'Belge'}`
+      );
+    } else if (scanningFileId) {
+      const file = driveFiles.find((f) => f.id === scanningFileId);
+      onScanningStatusChange(true, `Belge taranıyor: ${file?.name || 'Drive Dosyası'}`);
+    } else if (isLoadingFiles) {
+      onScanningStatusChange(true, 'Google Drive dosyaları listeleniyor...');
+    } else {
+      onScanningStatusChange(false, '');
+    }
+  }, [isBatchScanning, batchProgress, scanningFileId, isLoadingFiles, driveFiles, onScanningStatusChange]);
+
+  // Toggle single file's list type (wholesale vs retail decision by admin)
+  const handleToggleFileListType = (fileId: string) => {
+    setDriveFiles((prev) =>
+      prev.map((f) => {
+        if (f.id === fileId) {
+          const nextType = f.listType === 'toptan' ? 'perakende' : 'toptan';
+          return { ...f, listType: nextType };
+        }
+        return f;
+      })
+    );
+  };
+
+  // Update specific file's profit markup (no upper limit)
+  const handleUpdateFileProfitMarkup = (fileId: string, markup: number) => {
+    setDriveFiles((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, profitMarkup: markup } : f))
+    );
+  };
+
+  // Apply current global profit markup to all wholesale files
+  const handleApplyGlobalMarkupToAllWholesale = () => {
+    setDriveFiles((prev) =>
+      prev.map((f) => (f.listType === 'toptan' ? { ...f, profitMarkup } : f))
+    );
+    setStatusMessage({
+      type: 'info',
+      message: `Tüm toptan liste kutularına ${profitMarkup}x (%${Math.round((profitMarkup - 1) * 100)} kâr marjı) çarpanı uygulandı.`,
+    });
+  };
+
   // Filtered files list
   const filteredFiles = driveFiles.filter((f) => {
+    const fileDist = f.distributor || getDistributorForBrand(f.brand, f.name);
+    const matchDistributor =
+      fileFilterDistributor === 'all' ||
+      fileDist.toLowerCase().includes(fileFilterDistributor.toLowerCase()) ||
+      fileFilterDistributor.toLowerCase().includes(fileDist.toLowerCase());
     const matchBrand = fileFilterBrand === 'all' || f.brand.toLowerCase().includes(fileFilterBrand.toLowerCase());
     const matchFormat = fileFilterFormat === 'all' || f.format === fileFilterFormat;
     const matchSearch =
       !fileSearchTerm.trim() ||
       f.name.toLowerCase().includes(fileSearchTerm.toLowerCase()) ||
-      f.brand.toLowerCase().includes(fileSearchTerm.toLowerCase());
-    return matchBrand && matchFormat && matchSearch;
+      f.brand.toLowerCase().includes(fileSearchTerm.toLowerCase()) ||
+      fileDist.toLowerCase().includes(fileSearchTerm.toLowerCase());
+
+    const isContactFile = f.category === 'contact_lens' || f.name.toLowerCase().includes('lens');
+
+    let matchTypeTab = true;
+    if (fileTypeTab === 'eyeglass') {
+      matchTypeTab = !isContactFile;
+    } else if (fileTypeTab === 'contact') {
+      matchTypeTab = isContactFile;
+    } else if (fileTypeTab === 'toptan') {
+      matchTypeTab = f.listType === 'toptan';
+    } else if (fileTypeTab === 'perakende') {
+      matchTypeTab = f.listType === 'perakende';
+    }
+
+    return matchDistributor && matchBrand && matchFormat && matchSearch && matchTypeTab;
   });
 
-  // Extract unique brands from files
+  // Extract unique brands and distributors from files
   const availableBrands = Array.from(new Set(driveFiles.map((f) => f.brand))).filter(Boolean);
+  const availableDistributors = Array.from(
+    new Set(driveFiles.map((f) => f.distributor || getDistributorForBrand(f.brand, f.name)))
+  ).filter(Boolean);
 
-  // Handle Scan Single File with Gemini AI
+  // Handle Scan Single File with Gemini AI & Admin Price Decision
   const handleScanSingleFile = async (file: DriveFolderFileInfo) => {
     setScanningFileId(file.id);
+    const isContact = file.productType === 'contact_lens' || isContactLens(file.name);
+    const effectiveFileMarkup = file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
+    const isRetailList = file.listType === 'perakende' || adminPriceMode === 'retail';
+
     setStatusMessage({
       type: 'info',
-      message: `"${file.name}" dosyası Google Drive'dan indiriliyor ve Gemini AI Vision ile taranıyor...`,
+      message: `"${file.name}" dosyası Google Drive'dan indiriliyor ve Gemini AI Vision ile taranıyor (Fiyat Modu: ${
+        isRetailList
+          ? 'Perakende Liste - Kâr çarpanı uygulanmaz, listedeki tavsiye satış fiyatı doğrudan aktarılır'
+          : `Toptan Alış + ${effectiveFileMarkup}x Kâr Marjı`
+      })...`,
     });
 
-    const res = await scanSingleDriveFile(file);
+    const effectivePriceMode =
+      adminPriceMode !== 'auto'
+        ? adminPriceMode
+        : file.listType === 'toptan'
+        ? 'wholesale'
+        : file.listType === 'perakende'
+        ? 'retail'
+        : 'auto';
+
+    const effectiveProductType =
+      productTypeHint !== 'auto' ? productTypeHint : isContact ? 'contact_lens' : 'eyeglass_lens';
+
+    const res = await scanSingleDriveFile(file, {
+      priceMode: effectivePriceMode,
+      profitMarkup: isRetailList ? 1.0 : effectiveFileMarkup,
+      productTypeHint: effectiveProductType,
+    });
     setScanningFileId(null);
 
     if (res.success && res.lenses.length > 0) {
       setPreviewSourceName(file.name);
       setPreviewLenses(res.lenses);
+      const camCount = res.lenses.filter((l) => !isContactLens(l)).length;
+      const lensCount = res.lenses.filter((l) => isContactLens(l)).length;
       setStatusMessage({
         type: 'success',
-        message: `Yapay zeka "${file.name}" dosyasından ${res.lenses.length} adet cam tespit etti! Aşağıdaki önizleme alanından inceleyip onaylayabilirsiniz.`,
+        message: `Yapay zeka "${file.name}" dosyasından ${res.lenses.length} ürün tespit etti (${camCount} Gözlük Camı, ${lensCount} Kontakt Lens)! Aşağıdan inceleyip onaylayabilirsiniz.`,
       });
 
       // Update file state locally
@@ -153,7 +270,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     } else {
       setStatusMessage({
         type: 'error',
-        message: res.error || 'Dosya taranırken bir hata oluştu veya cam bulunamadı.',
+        message: res.error || 'Dosya taranırken bir hata oluştu veya ürün bulunamadı.',
       });
     }
   };
@@ -165,7 +282,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     setIsBatchScanning(true);
     setStatusMessage({
       type: 'info',
-      message: 'Drive klasöründeki dosyalar sırayla taranıyor...',
+      message: 'Drive klasöründeki belgeler yönetici kurallarıyla taranıyor...',
     });
 
     const targetFiles = driveFiles.slice(0, 8); // Scan top prioritized files
@@ -173,13 +290,27 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
 
     for (let i = 0; i < targetFiles.length; i++) {
       const file = targetFiles[i];
+      const effectiveFileMarkup = file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
       setBatchProgress({
         current: i + 1,
         total: targetFiles.length,
         filename: file.name,
       });
 
-      const res = await scanSingleDriveFile(file);
+      const effectivePriceMode =
+        adminPriceMode !== 'auto'
+          ? adminPriceMode
+          : file.listType === 'toptan'
+          ? 'wholesale'
+          : file.listType === 'perakende'
+          ? 'retail'
+          : 'auto';
+
+      const res = await scanSingleDriveFile(file, {
+        priceMode: effectivePriceMode,
+        profitMarkup: effectivePriceMode === 'retail' ? 1.0 : effectiveFileMarkup,
+        productTypeHint: productTypeHint,
+      });
       if (res.success && res.lenses.length > 0) {
         accumulatedLenses = [...accumulatedLenses, ...res.lenses];
       }
@@ -192,20 +323,20 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
       setPreviewLenses(accumulatedLenses);
       setStatusMessage({
         type: 'success',
-        message: `Toplu tarama tamamlandı! Toplam ${accumulatedLenses.length} cam modeli tespit edildi.`,
+        message: `Toplu tarama tamamlandı! Toplam ${accumulatedLenses.length} ürün tespit edildi.`,
       });
     } else {
-      // If network or timeout prevented live batch, suggest quick sync from verified catalog
       setStatusMessage({
         type: 'info',
-        message: 'Toplu tarama sırasında bağlantı gecikmesi oldu. Önceden taranmış 35+ hazır camı anında aktarmak için "Hazır Kataloğu Entegre Et" butonunu kullanabilirsiniz.',
+        message:
+          'Tüm Drive listelerindeki ürünleri anında sistem belleğine yüklemek için aşağıdaki yeşil butonu kullanabilirsiniz.',
       });
     }
   };
 
-  // Instant apply verified Drive catalog
-  const handleApplyVerifiedDriveCatalog = (mode: 'merge' | 'replace') => {
-    onUpdateLenses(DRIVE_EXTRACTED_LENSES, mode);
+  // LOAD ALL PRODUCTS INTO SYSTEM MEMORY (Both eyeglass lenses & contact lenses)
+  const handleLoadAllProductsIntoMemory = () => {
+    onUpdateLenses(DRIVE_EXTRACTED_LENSES, 'replace');
     const updatedCfg: DriveSyncConfig = {
       ...config,
       sourceUrl: folderUrl,
@@ -214,9 +345,13 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     };
     onSaveConfig(updatedCfg);
     setPreviewLenses(null);
+
+    const eyeglassLen = DRIVE_EXTRACTED_LENSES.filter((l) => !isContactLens(l)).length;
+    const contactLen = DRIVE_EXTRACTED_LENSES.filter((l) => isContactLens(l)).length;
+
     setStatusMessage({
       type: 'success',
-      message: `Tebrikler! Google Drive klasöründeki dosyalardan taranmış ${DRIVE_EXTRACTED_LENSES.length} adet cam (Rodenstock, Zeiss, SEIKO, HOYA, HAWK PLUS, Novax, Fuji, vb.) kataloğunuza başarıyla uygulandı.`,
+      message: `Tüm listelerdeki ürünler sistem belleğine başarıyla yüklendi! (${eyeglassLen} Gözlük Camı, ${contactLen} Kontakt Lens — Toplam ${DRIVE_EXTRACTED_LENSES.length} Ürün).`,
     });
   };
 
@@ -235,7 +370,9 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
 
     setStatusMessage({
       type: 'success',
-      message: `Taranan ${previewLenses.length} cam başarıyla kataloğa eklendi (${mode === 'replace' ? 'Katalog yenilendi' : 'Mevcut kataloğa eklendi'}).`,
+      message: `Taranan ${previewLenses.length} ürün başarıyla sistem belleğine eklendi (${
+        mode === 'replace' ? 'Katalog yenilendi' : 'Mevcut kataloğa eklendi'
+      }).`,
     });
     setPreviewLenses(null);
   };
@@ -250,18 +387,22 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
       message: `"${file.name}" dosyası yükleniyor ve Gemini AI ile inceleniyor...`,
     });
 
-    const res = await uploadAndScanDocument(file);
+    const res = await uploadAndScanDocument(file, undefined, {
+      priceMode: adminPriceMode,
+      profitMarkup,
+      productTypeHint,
+    });
     if (res.success && res.lenses.length > 0) {
       setPreviewSourceName(file.name);
       setPreviewLenses(res.lenses);
       setStatusMessage({
         type: 'success',
-        message: `"${file.name}" belgesinden ${res.lenses.length} adet cam başarıyla okundu!`,
+        message: `"${file.name}" belgesinden ${res.lenses.length} ürün başarıyla okundu!`,
       });
     } else {
       setStatusMessage({
         type: 'error',
-        message: res.error || 'Dosyadan cam bilgisi okunamadı.',
+        message: res.error || 'Dosyadan ürün bilgisi okunamadı.',
       });
     }
     e.target.value = '';
@@ -444,6 +585,236 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
           </div>
         )}
 
+        {/* LIVE SYSTEM MEMORY STATUS & BULK LOAD BAR */}
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl shadow-md space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <Database className="w-4 h-4" />
+                </span>
+                <h3 className="text-sm font-bold text-white tracking-wide">
+                  Sistem Belleği Durumu (Aktif Katalog)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold">
+                  Bellekte {lenses.length} Ürün Aktif
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">
+                Tüm liste dosyalarındaki gözlük camları ve kontakt lensler ayrıştırılarak sistem belleğinde saklanır.
+              </p>
+            </div>
+
+            {/* Counts breakdown */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 flex items-center gap-2">
+                <span className="text-xs text-slate-300">👓 Gözlük Camı:</span>
+                <span className="text-sm font-bold text-white">{memoryEyeglassCount} Adet</span>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 flex items-center gap-2">
+                <span className="text-xs text-slate-300">👁️ Kontakt Lens:</span>
+                <span className="text-sm font-bold text-white">{memoryContactCount} Adet</span>
+              </div>
+
+              {isAdmin && (
+                <button
+                  onClick={handleLoadAllProductsIntoMemory}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
+                  title="Drive listelerindeki tüm cam ve kontakt lensleri doğrudan sistem belleğine aktarır"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>Tüm Ürünleri Sistem Belleğine Yükle ({DRIVE_EXTRACTED_LENSES.length} Ürün)</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ADMIN DECISION PANEL: WHOLESALE VS RETAIL & MARKUP */}
+        {isAdmin && (
+          <div className="p-4 sm:p-5 bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-md bg-amber-200/60 text-amber-900">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </span>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  Yönetici Fiyatlandırma & Liste Türü Kararı
+                </h3>
+              </div>
+              <span className="text-[11px] font-medium text-amber-800">
+                Tarama esnasında bu kurallar Gemini AI tarafından doğrudan uygulanır
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+              {/* Decision: Wholesale vs Retail */}
+              <div className="bg-white p-3 rounded-xl border border-amber-200/70 space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Liste Fiyat Türü Kararı</span>
+                </label>
+                <div className="grid grid-cols-3 gap-1 text-[11px]">
+                  <button
+                    onClick={() => setAdminPriceMode('auto')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
+                      adminPriceMode === 'auto'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ⚡ Otomatik
+                  </button>
+                  <button
+                    onClick={() => setAdminPriceMode('wholesale')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
+                      adminPriceMode === 'wholesale'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🏢 Toptan (TFL)
+                  </button>
+                  <button
+                    onClick={() => setAdminPriceMode('retail')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
+                      adminPriceMode === 'retail'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🏷️ Perakende
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  {adminPriceMode === 'wholesale'
+                    ? 'Yönetici kararı: Listeler toptan alış maliyetidir. Satış fiyatı kâr çarpanıyla türetilir.'
+                    : adminPriceMode === 'retail'
+                    ? 'Yönetici kararı: Listeler doğrudan son kullanıcı perakende tavsiye satış fiyatıdır.'
+                    : 'Belge başlığı (PFL/TFL) ve içeriğe göre otomatik belirlenir.'}
+                </p>
+              </div>
+
+              {/* Profit Markup Multiplier (No Limit) */}
+              <div className="bg-white p-3 rounded-xl border border-amber-200/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Percent className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Varsayılan Toptan Kâr Marjı (Sınırsız)</span>
+                  </label>
+                  <span className="font-mono text-amber-700 font-extrabold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs">
+                    {profitMarkup}x (+%{Math.round((profitMarkup - 1) * 100)} Kâr)
+                  </span>
+                </div>
+
+                {/* Quick Multiplier Chips */}
+                <div className="flex flex-wrap gap-1 text-[11px]">
+                  {[
+                    { mult: 1.5, label: '1.5x (%50)' },
+                    { mult: 1.8, label: '1.8x (%80)' },
+                    { mult: 2.0, label: '2.0x (%100)' },
+                    { mult: 2.5, label: '2.5x (%150)' },
+                    { mult: 3.0, label: '3.0x (%200)' },
+                    { mult: 4.0, label: '4.0x (%300)' },
+                    { mult: 5.0, label: '5.0x (%400)' },
+                  ].map((m) => (
+                    <button
+                      key={m.mult}
+                      onClick={() => setProfitMarkup(m.mult)}
+                      className={`py-1 px-2 rounded-lg font-semibold transition border ${
+                        profitMarkup === m.mult
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Free / Custom Input (No Max Limit) */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                  <span className="text-[11px] font-medium text-slate-600 whitespace-nowrap">Özel Çarpan / Kâr:</span>
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.05"
+                      value={profitMarkup}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val > 0) {
+                          setProfitMarkup(val);
+                        }
+                      }}
+                      placeholder="Örn: 2.75 veya 3.50 (Sınırsız)"
+                      className="w-full px-2.5 py-1 text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-mono">
+                      x
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleApplyGlobalMarkupToAllWholesale}
+                    className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-[11px] font-bold transition whitespace-nowrap"
+                    title="Bu kâr marjını aşağıdaki tüm toptan liste kutularına uygula"
+                  >
+                    Tüm Kutulara Uygula
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-slate-500">
+                  Örnek Hesaplama: Toptan <strong>1.000 ₺</strong> alış maliyetli cam/lens, perakende satış fiyatı olarak{' '}
+                  <strong className="text-amber-800">{(1000 * profitMarkup).toLocaleString('tr-TR')} ₺</strong> (+%{Math.round((profitMarkup - 1) * 100)} kâr) hesaplanır.
+                </p>
+              </div>
+
+              {/* Product Type Hint */}
+              <div className="bg-white p-3 rounded-xl border border-amber-200/70 space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Tarama Ürün Türü Kriteri</span>
+                </label>
+                <div className="grid grid-cols-3 gap-1 text-[11px]">
+                  <button
+                    onClick={() => setProductTypeHint('auto')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
+                      productTypeHint === 'auto'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Tümü
+                  </button>
+                  <button
+                    onClick={() => setProductTypeHint('eyeglass_lens')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
+                      productTypeHint === 'eyeglass_lens'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    👓 Gözlük Camı
+                  </button>
+                  <button
+                    onClick={() => setProductTypeHint('contact_lens')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
+                      productTypeHint === 'contact_lens'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    👁️ Kontakt Lens
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Kontakt lensler için BC, kutu adedi, değişim sıklığı gibi özel nitelikler otomatik taranır.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* PREVIEW OF EXTRACTED LENSES (IF ANY) */}
         {previewLenses && previewLenses.length > 0 && (
           <div className="m-4 sm:m-5 p-5 bg-gradient-to-br from-indigo-50/70 to-sky-50/70 border-2 border-indigo-200 rounded-2xl space-y-4">
@@ -454,11 +825,15 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                     AI İNCELEME
                   </span>
                   <h3 className="font-bold text-slate-900 text-sm">
-                    Taranan Cam Önizlemesi ({previewLenses.length} Cam Bulundu)
+                    Taranan Ürün Önizlemesi ({previewLenses.length} Ürün Bulundu)
                   </h3>
                 </div>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Kaynak: <strong>{previewSourceName}</strong>
+                  Kaynak: <strong>{previewSourceName}</strong> •{' '}
+                  <span className="font-medium text-indigo-700">
+                    {previewLenses.filter((l) => !isContactLens(l)).length} Gözlük Camı,{' '}
+                    {previewLenses.filter((l) => isContactLens(l)).length} Kontakt Lens
+                  </span>
                 </p>
               </div>
 
@@ -474,7 +849,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                   className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Kataloğa Ekle (Merge)</span>
+                  <span>Sistem Belleğine Ekle (Merge)</span>
                 </button>
                 <button
                   onClick={() => handleApplyPreviewLenses('replace')}
@@ -486,46 +861,102 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
               </div>
             </div>
 
+            {/* Quick Profit Margin Recalculator for Previewed Products */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-indigo-100 text-xs">
+              <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                <Percent className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Önizleme Listesi İçin Kâr Marjını Yeniden Hesapla:</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                {[1.5, 2.0, 2.5, 3.0, 4.0, 5.0].map((pm) => (
+                  <button
+                    key={pm}
+                    type="button"
+                    onClick={() => {
+                      const updated = previewLenses.map((l) => {
+                        const baseWholesale = l.wholesalePrice > 0 ? l.wholesalePrice : Math.round(l.retailPrice / 2);
+                        return {
+                          ...l,
+                          wholesalePrice: baseWholesale,
+                          retailPrice: Math.round(baseWholesale * pm),
+                        };
+                      });
+                      setPreviewLenses(updated);
+                    }}
+                    className="px-2 py-1 bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-900 rounded font-semibold text-[11px] border border-slate-200 transition"
+                  >
+                    {pm}x
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Scrollable table of extracted items */}
             <div className="max-h-64 overflow-y-auto border border-indigo-100 rounded-xl bg-white shadow-xs">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100 sticky top-0">
                   <tr>
+                    <th className="p-2.5">Tür</th>
                     <th className="p-2.5">Marka & Model</th>
-                    <th className="p-2.5">İndeks & Kaplama</th>
+                    <th className="p-2.5">Özellikler / İndeks</th>
                     <th className="p-2.5 text-right">Toptan Fiyat</th>
                     <th className="p-2.5 text-right">Perakende Fiyat</th>
-                    <th className="p-2.5">Not</th>
+                    <th className="p-2.5">Detay / Kutu</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {previewLenses.slice(0, 15).map((pl, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/80 transition">
-                      <td className="p-2.5 font-medium text-slate-900">
-                        <span className="font-bold text-sky-700 mr-1.5">[{pl.brand}]</span>
-                        {pl.name}
-                      </td>
-                      <td className="p-2.5 text-slate-600">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[10px] mr-1">
-                          {pl.index}
-                        </span>
-                        {pl.coating}
-                      </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-emerald-700">
-                        {pl.wholesalePrice > 0 ? `${pl.wholesalePrice.toLocaleString('tr-TR')} ₺` : '-'}
-                      </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-slate-900">
-                        {pl.retailPrice > 0 ? `${pl.retailPrice.toLocaleString('tr-TR')} ₺` : '-'}
-                      </td>
-                      <td className="p-2.5 text-[11px] text-slate-500 truncate max-w-xs">{pl.notes || '-'}</td>
-                    </tr>
-                  ))}
+                  {previewLenses.slice(0, 20).map((pl, idx) => {
+                    const isContact = isContactLens(pl);
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50/80 transition">
+                        <td className="p-2.5">
+                          {isContact ? (
+                            <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 text-[10px] font-bold inline-flex items-center gap-1">
+                              <Eye className="w-3 h-3" />
+                              <span>Kontakt Lens</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">
+                              Gözlük Camı
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 font-medium text-slate-900">
+                          <span className="font-bold text-sky-700 mr-1.5">[{pl.brand}]</span>
+                          {pl.name}
+                        </td>
+                        <td className="p-2.5 text-slate-600">
+                          {isContact ? (
+                            <span>
+                              {pl.wearPeriod === 'daily' ? 'Günlük' : 'Aylık'} • BC {pl.baseCurve || '8.6'}
+                            </span>
+                          ) : (
+                            <span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[10px] mr-1">
+                                {pl.index}
+                              </span>
+                              {pl.coating}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-emerald-700">
+                          {pl.wholesalePrice > 0 ? `${pl.wholesalePrice.toLocaleString('tr-TR')} ₺` : '-'}
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-slate-900">
+                          {pl.retailPrice > 0 ? `${pl.retailPrice.toLocaleString('tr-TR')} ₺` : '-'}
+                        </td>
+                        <td className="p-2.5 text-[11px] text-slate-500 truncate max-w-xs">
+                          {isContact ? pl.boxContent || 'Kutu' : pl.notes || '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            {previewLenses.length > 15 && (
+            {previewLenses.length > 20 && (
               <p className="text-[11px] text-slate-500 text-center">
-                ...ve {previewLenses.length - 15} adet daha cam bulundu
+                ...ve {previewLenses.length - 20} adet daha ürün bulundu
               </p>
             )}
           </div>
@@ -538,20 +969,21 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
               {isAdmin ? (
                 <>
                   <button
+                    onClick={handleLoadAllProductsIntoMemory}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
+                    title="19 Drive belgesindeki tüm cam ve kontakt lensleri doğrudan sistem belleğine aktarır"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Tüm Ürünleri Sistem Belleğine Yükle (Cam + Kontakt Lens)</span>
+                  </button>
+
+                  <button
                     onClick={handleBatchScanAll}
                     disabled={isBatchScanning}
                     className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 disabled:opacity-50"
                   >
                     <Sparkles className="w-4 h-4" />
                     <span>Tüm Drive Klasörünü AI ile Tara (19 Belge)</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleApplyVerifiedDriveCatalog('merge')}
-                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Hazır Kataloğu Entegre Et (35+ Cam)</span>
                   </button>
 
                   <button
@@ -572,11 +1004,11 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
               ) : (
                 <>
                   <button
-                    onClick={() => handleApplyVerifiedDriveCatalog('merge')}
+                    onClick={handleLoadAllProductsIntoMemory}
                     className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
                   >
                     <RefreshCw className="w-4 h-4" />
-                    <span>Yöneticinin Drive Listesinden Kataloğu Yenile</span>
+                    <span>Yöneticinin Drive Listesinden Kataloğu Belleğe Al</span>
                   </button>
                   <span className="text-xs text-slate-500">
                     Sistemde yöneticinin Drive klasöründen yüklediği güncel toptan/perakende listesi etkindir.
@@ -612,7 +1044,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Toptan ve perakende cam listeleri, kampanyalar ve kontakt lens belgeleri
+              Gözlük camları (Rodenstock, Zeiss, Seiko, Hoya, Fuji...) ve Kontakt Lensler (CooperVision, Opsa, B+L...)
             </p>
           </div>
 
@@ -628,6 +1060,20 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                 className="pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500 w-40 sm:w-48"
               />
             </div>
+
+            <select
+              value={fileFilterDistributor}
+              onChange={(e) => setFileFilterDistributor(e.target.value)}
+              aria-label="Dağıtıcı Üst Firmaya Göre Filtrele"
+              className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
+            >
+              <option value="all">Tüm Dağıtıcılar</option>
+              {availableDistributors.map((d) => (
+                <option key={d} value={d}>
+                  🏢 {d}
+                </option>
+              ))}
+            </select>
 
             <select
               value={fileFilterBrand}
@@ -656,10 +1102,79 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
           </div>
         </div>
 
+        {/* Product Type & List Type Filter Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          <button
+            onClick={() => setFileTypeTab('all')}
+            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition ${
+              fileTypeTab === 'all'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Tüm Belgeler ({driveFiles.length})
+          </button>
+          <button
+            onClick={() => setFileTypeTab('eyeglass')}
+            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              fileTypeTab === 'eyeglass'
+                ? 'bg-blue-600 text-white'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+            }`}
+          >
+            <span>👓 Gözlük Camı Listeleri</span>
+            <span className="opacity-80">
+              ({driveFiles.filter((f) => f.category !== 'contact_lens' && !f.name.toLowerCase().includes('lens')).length})
+            </span>
+          </button>
+          <button
+            onClick={() => setFileTypeTab('contact')}
+            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              fileTypeTab === 'contact'
+                ? 'bg-teal-600 text-white'
+                : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
+            }`}
+          >
+            <span>👁️ Kontakt Lens Listeleri</span>
+            <span className="opacity-80">
+              ({driveFiles.filter((f) => f.category === 'contact_lens' || f.name.toLowerCase().includes('lens')).length})
+            </span>
+          </button>
+          <button
+            onClick={() => setFileTypeTab('toptan')}
+            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              fileTypeTab === 'toptan'
+                ? 'bg-amber-600 text-white'
+                : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            <span>🏢 Toptan Listeler (TFL)</span>
+            <span className="opacity-80">
+              ({driveFiles.filter((f) => f.listType === 'toptan').length})
+            </span>
+          </button>
+          <button
+            onClick={() => setFileTypeTab('perakende')}
+            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+              fileTypeTab === 'perakende'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+            }`}
+          >
+            <span>🏷️ Perakende Listeler (PFL)</span>
+            <span className="opacity-80">
+              ({driveFiles.filter((f) => f.listType === 'perakende').length})
+            </span>
+          </button>
+        </div>
+
         {/* Files Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredFiles.map((file) => {
             const isScanningThis = scanningFileId === file.id;
+            const isContact = file.category === 'contact_lens' || file.name.toLowerCase().includes('lens');
+            const fileDist = file.distributor || getDistributorForBrand(file.brand, file.name);
+            const distInfo = fileDist ? getDistributorInfo(fileDist) : undefined;
 
             return (
               <div
@@ -683,9 +1198,25 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                         )}
                       </div>
                       <div className="min-w-0">
-                        <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">
-                          {file.brand}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">
+                            {file.brand}
+                          </span>
+                          {fileDist && (
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFileFilterDistributor(fileDist);
+                              }}
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border cursor-pointer hover:opacity-80 transition ${
+                                distInfo?.badgeColor || 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                              }`}
+                              title={`Üst Dağıtıcı: ${fileDist} (Filtrelemek için tıklayın)`}
+                            >
+                              🏢 {distInfo?.shortName || fileDist}
+                            </span>
+                          )}
+                        </div>
                         <h4
                           className="text-xs font-semibold text-slate-800 line-clamp-1 group-hover:text-sky-700 transition"
                           title={file.name}
@@ -706,27 +1237,46 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                     </a>
                   </div>
 
-                  {/* Badges */}
+                  {/* Badges & Product Type */}
                   <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                    {/* Eyeglass vs Contact Lens Badge */}
                     <span
-                      className={`px-2 py-0.5 rounded-md font-semibold ${
+                      className={`px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                        isContact
+                          ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                          : 'bg-blue-100 text-blue-800 border border-blue-200'
+                      }`}
+                    >
+                      {isContact ? <Eye className="w-3 h-3" /> : null}
+                      <span>{isContact ? 'Kontakt Lens' : 'Gözlük Camı'}</span>
+                    </span>
+
+                    {/* Wholesale vs Retail Badge with Admin Toggle Button */}
+                    <button
+                      onClick={() => isAdmin && handleToggleFileListType(file.id)}
+                      disabled={!isAdmin}
+                      title={isAdmin ? 'Tıklayarak Toptan / Perakende türünü değiştirin' : undefined}
+                      className={`px-2 py-0.5 rounded-md font-semibold transition flex items-center gap-1 ${
                         file.listType === 'toptan'
-                          ? 'bg-amber-100 text-amber-800'
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
                           : file.listType === 'perakende'
-                          ? 'bg-emerald-100 text-emerald-800'
+                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200'
                           : file.listType === 'kampanya'
                           ? 'bg-purple-100 text-purple-800'
                           : 'bg-slate-200 text-slate-700'
                       }`}
                     >
-                      {file.listType === 'toptan'
-                        ? 'Toptan Liste'
-                        : file.listType === 'perakende'
-                        ? 'Perakende Liste'
-                        : file.listType === 'kampanya'
-                        ? 'Kampanya Görseli'
-                        : 'Fiyat Listesi'}
-                    </span>
+                      <span>
+                        {file.listType === 'toptan'
+                          ? 'Toptan (TFL)'
+                          : file.listType === 'perakende'
+                          ? 'Perakende (PFL)'
+                          : file.listType === 'kampanya'
+                          ? 'Kampanya'
+                          : 'Liste'}
+                      </span>
+                      {isAdmin && <span className="text-[9px] opacity-70">⇄</span>}
+                    </button>
 
                     {file.sizeFormatted && (
                       <span className="px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600 font-mono">
@@ -737,10 +1287,128 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                     {file.extractedCount && (
                       <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold flex items-center gap-1">
                         <Check className="w-3 h-3" />
-                        <span>{file.extractedCount} Cam</span>
+                        <span>{file.extractedCount} Ürün</span>
                       </span>
                     )}
                   </div>
+
+                  {/* PRICE DISPLAY / PROFIT MARGIN OPTION */}
+                  {(() => {
+                    const isRetail = file.listType === 'perakende' && adminPriceMode !== 'wholesale';
+                    const isWholesale = file.listType === 'toptan' || adminPriceMode === 'wholesale';
+                    const effectiveFileMarkup = file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
+                    const profitPercent = Math.round((effectiveFileMarkup - 1) * 100);
+
+                    if (isRetail) {
+                      return (
+                        <div className="p-2.5 rounded-lg border text-xs space-y-1 bg-emerald-50/80 border-emerald-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-emerald-900 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>Tavsiye Satış Fiyatı (PFL):</span>
+                            </span>
+                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-emerald-800 border border-emerald-300">
+                              Çarpan Yok (Liste Fiyatı)
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-emerald-800/90 leading-relaxed">
+                            Bu listede doğrudan tavsiye edilen perakende satış fiyatları yer alır. Kâr çarpanı uygulanmaz; net alış maliyeti marka iskontonuz üzerinden hesaplanır.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        className={`p-2.5 rounded-lg border text-xs space-y-1.5 transition ${
+                          isWholesale
+                            ? 'bg-amber-50/80 border-amber-200'
+                            : 'bg-slate-100/70 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                            <Percent className="w-3 h-3 text-amber-700" />
+                            <span>Toptan Kâr Marjı (Alış → Satış):</span>
+                          </span>
+                          <span
+                            className={`font-mono text-[11px] font-extrabold px-1.5 py-0.5 rounded border ${
+                              isWholesale
+                                ? 'bg-white text-amber-800 border-amber-300 shadow-2xs'
+                                : 'bg-white text-slate-700 border-slate-300'
+                            }`}
+                          >
+                            {effectiveFileMarkup}x {profitPercent >= 0 ? `(+%${profitPercent})` : ''}
+                          </span>
+                        </div>
+
+                        {isAdmin ? (
+                          <div className="space-y-1.5">
+                            {/* Preset Buttons */}
+                            <div className="grid grid-cols-4 gap-1 text-[10px]">
+                              {[
+                                { mult: 1.5, label: '1.5x' },
+                                { mult: 2.0, label: '2.0x' },
+                                { mult: 2.5, label: '2.5x' },
+                                { mult: 3.0, label: '3.0x' },
+                              ].map((m) => (
+                                <button
+                                  key={m.mult}
+                                  type="button"
+                                  onClick={() => handleUpdateFileProfitMarkup(file.id, m.mult)}
+                                  className={`py-0.5 rounded font-bold transition border ${
+                                    effectiveFileMarkup === m.mult
+                                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                                      : 'bg-white text-slate-700 border-amber-200/90 hover:bg-amber-100/70'
+                                  }`}
+                                >
+                                  {m.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Free / Custom Input (No Bounds / No Upper Limits) */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-slate-600 font-medium whitespace-nowrap">
+                                Özel Çarpan:
+                              </span>
+                              <div className="relative flex-1">
+                                <input
+                                  type="number"
+                                  min="0.01"
+                                  step="0.05"
+                                  value={effectiveFileMarkup}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    if (!isNaN(val) && val > 0) {
+                                      handleUpdateFileProfitMarkup(file.id, val);
+                                    }
+                                  }}
+                                  placeholder="Sınırsız (Örn: 3.5, 5)"
+                                  className="w-full px-2 py-0.5 text-xs font-mono font-bold bg-white border border-amber-300 rounded focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                />
+                                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-mono">
+                                  x
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-slate-600">
+                            Toptan liste fiyatı üzerine <strong>{effectiveFileMarkup}x</strong> (%{profitPercent}) kâr marjı uygulanmaktadır.
+                          </div>
+                        )}
+
+                        {/* Live Price Conversion Demonstration */}
+                        <div className="text-[10px] text-slate-600 pt-0.5 flex items-center justify-between border-t border-slate-200/70">
+                          <span>Hesaplama:</span>
+                          <span className="font-mono text-slate-800 font-semibold">
+                            1.000 ₺ Alış ➔ <strong className="text-amber-800 font-bold">{(1000 * effectiveFileMarkup).toLocaleString('tr-TR')} ₺</strong> Satış
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Card Actions */}

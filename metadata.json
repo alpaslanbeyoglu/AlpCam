@@ -1,6 +1,6 @@
 {
-  "name": "Optik Cam Fiyat Listesi",
-  "description": "Gözlükçüler için mobil uyumlu, toptan/perakende ayrımı, marka iskontoları, özel listeler ve Google Drive senkronizasyonu içeren profesyonel cam fiyat rehberi.",
+  "name": "Optik Cam & Kontakt Lens Fiyat Kataloğu",
+  "description": "Gözlükçüler ve optisyenler için gözlük camları ve kontakt lensler, toptan/perakende liste ayrımı, marka iskontoları ve Google Drive senkronizasyonu içeren profesyonel fiyat kataloğu.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

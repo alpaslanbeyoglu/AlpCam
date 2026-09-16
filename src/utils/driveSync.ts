@@ -39,8 +39,20 @@ export function convertGoogleDriveUrl(rawUrl: string): { url: string; type: 'she
  * Uzak Google Drive / Google Sheets URL'sinden veri çeker
  */
 export async function fetchFromDriveUrl(driveUrl: string): Promise<ArrayBuffer> {
-  const { url } = convertGoogleDriveUrl(driveUrl);
-  
+  const trimmed = driveUrl.trim();
+
+  // Try via server proxy endpoint first (avoids browser CORS issues)
+  try {
+    const proxyRes = await fetch(`/api/drive/fetch-file?url=${encodeURIComponent(trimmed)}`);
+    if (proxyRes.ok) {
+      return await proxyRes.arrayBuffer();
+    }
+  } catch (proxyErr) {
+    console.warn('Proxy fetch failed, attempting direct fetch:', proxyErr);
+  }
+
+  // Direct fetch fallback
+  const { url } = convertGoogleDriveUrl(trimmed);
   const response = await fetch(url, {
     method: 'GET',
     headers: {

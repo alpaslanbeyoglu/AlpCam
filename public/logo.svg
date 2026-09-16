@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="gradOut" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8C00"/>
+      <stop offset="100%" stop-color="#FF4500"/>
+    </linearGradient>
+    <linearGradient id="gradMid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFB088"/>
+      <stop offset="100%" stop-color="#FF8A50"/>
+    </linearGradient>
+  </defs>
+  
+  <rect x="2" y="2" width="96" height="96" rx="24" ry="24" fill="#FAFAFA" />
+  
+  <!-- Outer thick orange circle -->
+  <circle cx="50" cy="50" r="32" fill="none" stroke="url(#gradOut)" stroke-width="12"/>
+  
+  <!-- Inner thick peach circle -->
+  <circle cx="50" cy="50" r="16" fill="url(#gradMid)"/>
+  
+  <!-- Center orange dot -->
+  <circle cx="50" cy="50" r="5" fill="#FF4500"/>
+  
+  <!-- Small white center dot -->
+  <circle cx="50" cy="50" r="2" fill="#FFFFFF"/>
+</svg>

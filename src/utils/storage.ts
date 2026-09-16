@@ -1,6 +1,7 @@
 import { Lens, BrandDiscount, CustomList, DriveSyncConfig } from '../types';
 import { INITIAL_LENSES } from '../data/initialLenses';
 import { INITIAL_DISCOUNTS } from '../data/initialDiscounts';
+import { sanitizeLens, normalizeBrandName } from './pricing';
 
 const KEYS = {
   LENSES: 'optik_lenses_v1',
@@ -55,24 +56,38 @@ export function loadStoredLenses(): Lens[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // If stored lenses do not have drive extracted lenses yet, merge them
-        const hasDriveLenses = parsed.some((l: Lens) => l.id.startsWith('rs-') || l.id.startsWith('zs-') || l.id.startsWith('hp-'));
-        if (!hasDriveLenses) {
-          const merged = [...INITIAL_LENSES, ...parsed.filter((p: Lens) => !INITIAL_LENSES.some(i => i.id === p.id))];
-          return merged;
+        // Ensure all products are sanitized (correct brand spelling and productType)
+        const sanitizedList = parsed.map(sanitizeLens);
+
+        // Ensure all Drive extracted lenses and contact lenses are present in system memory
+        const hasContactLenses = sanitizedList.some(
+          (l: Lens) => l.productType === 'contact_lens' || l.id?.startsWith('cv-') || l.id?.startsWith('opsa-') || l.id?.startsWith('alcon-') || l.id?.startsWith('bl-')
+        );
+        const hasDriveLenses = sanitizedList.some((l: Lens) => l.id?.startsWith('rs-') || l.id?.startsWith('zs-') || l.id?.startsWith('hp-'));
+
+        if (!hasContactLenses || !hasDriveLenses) {
+          // Merge missing initial & drive extracted products into stored state
+          const existingIds = new Set(sanitizedList.map((p: Lens) => p.id));
+          const missing = INITIAL_LENSES.filter((i) => !existingIds.has(i.id)).map(sanitizeLens);
+          const updated = [...sanitizedList, ...missing];
+          saveStoredLenses(updated);
+          return updated;
         }
-        return parsed;
+
+        saveStoredLenses(sanitizedList);
+        return sanitizedList;
       }
     }
   } catch (err) {
     console.error('Failed to load lenses from storage:', err);
   }
-  return INITIAL_LENSES;
+  return INITIAL_LENSES.map(sanitizeLens);
 }
 
 export function saveStoredLenses(lenses: Lens[]): void {
   try {
-    localStorage.setItem(KEYS.LENSES, JSON.stringify(lenses));
+    const sanitized = lenses.map(sanitizeLens);
+    localStorage.setItem(KEYS.LENSES, JSON.stringify(sanitized));
   } catch (err) {
     console.error('Failed to save lenses to storage:', err);
   }
@@ -155,7 +170,13 @@ export function loadStoredDriveConfig(): DriveSyncConfig {
     const raw = localStorage.getItem(KEYS.DRIVE_CONFIG);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.sourceUrl) return parsed;
+      if (parsed.sourceUrl) {
+        const isFolder = parsed.sourceUrl.includes('/folders/');
+        return {
+          ...parsed,
+          autoSyncOnLoad: isFolder ? false : Boolean(parsed.autoSyncOnLoad),
+        };
+      }
     }
   } catch (err) {
     console.error('Failed to load drive config:', err);

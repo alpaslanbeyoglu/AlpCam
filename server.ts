@@ -27,6 +27,7 @@ interface ParsedDriveFile {
   mimeType: string;
   format: 'pdf' | 'image' | 'excel' | 'other';
   brand: string;
+  productType?: 'eyeglass_lens' | 'contact_lens';
   listType: 'perakende' | 'toptan' | 'kampanya' | 'genel';
   sizeFormatted?: string;
   downloadUrl: string;
@@ -37,20 +38,43 @@ interface ParsedDriveFile {
 function inferFileInfo(fileName: string, mimeType: string, id: string): ParsedDriveFile {
   const lower = fileName.toLowerCase();
   let brand = 'Diğer';
-  if (lower.includes('rodenstock')) brand = 'Rodenstock';
-  else if (lower.includes('zeiss')) brand = 'Zeiss';
-  else if (lower.includes('seiko')) brand = 'SEIKO';
-  else if (lower.includes('hoya')) brand = 'HOYA';
-  else if (lower.includes('fuji')) brand = 'FUJİ';
-  else if (lower.includes('hawk')) brand = 'HAWK PLUS';
-  else if (lower.includes('novax')) brand = 'Novax';
-  else if (lower.includes('cv') || lower.includes('cooper')) brand = 'CooperVision';
-  else if (lower.includes('opsa') || lower.includes('adore') || lower.includes('desio')) brand = 'Opsa / Desio';
-  else if (lower.includes('medikal') || lower.includes('lens')) brand = 'Bausch + Lomb / Lens';
+  let productType: 'eyeglass_lens' | 'contact_lens' = 'eyeglass_lens';
+
+  if (lower.includes('rodenstock')) {
+    brand = 'Rodenstock';
+    productType = 'eyeglass_lens';
+  } else if (lower.includes('zeiss')) {
+    brand = 'Zeiss';
+    productType = 'eyeglass_lens';
+  } else if (lower.includes('seiko')) {
+    brand = 'SEIKO';
+    productType = 'eyeglass_lens';
+  } else if (lower.includes('hoya')) {
+    brand = 'HOYA';
+    productType = 'eyeglass_lens';
+  } else if (lower.includes('fuji')) {
+    brand = 'FUJİ';
+    productType = 'eyeglass_lens';
+  } else if (lower.includes('hawk')) {
+    brand = 'HAWK PLUS';
+    productType = 'eyeglass_lens';
+  } else if (lower.includes('novax')) {
+    brand = 'Novax';
+    productType = 'eyeglass_lens';
+  } else if (lower.includes('cv') || lower.includes('cooper')) {
+    brand = 'CooperVision';
+    productType = 'contact_lens';
+  } else if (lower.includes('opsa') || lower.includes('adore') || lower.includes('desio')) {
+    brand = 'Opsa / Desio';
+    productType = 'contact_lens';
+  } else if (lower.includes('medikal') || lower.includes('lens')) {
+    brand = 'Bausch + Lomb / Lens';
+    productType = 'contact_lens';
+  }
 
   let listType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
   if (lower.includes('kampanya')) listType = 'kampanya';
-  else if (lower.includes('toptan') || lower.includes('tfl')) listType = 'toptan';
+  else if (lower.includes('toptan') || lower.includes('tfl') || lower.includes('cv toptan')) listType = 'toptan';
   else if (lower.includes('perakende') || lower.includes('parakende') || lower.includes('pfl')) listType = 'perakende';
 
   let format: 'pdf' | 'image' | 'excel' | 'other' = 'other';
@@ -64,6 +88,7 @@ function inferFileInfo(fileName: string, mimeType: string, id: string): ParsedDr
     mimeType: mimeType || (format === 'pdf' ? 'application/pdf' : 'image/jpeg'),
     format,
     brand,
+    productType,
     listType,
     downloadUrl: `https://drive.google.com/uc?export=download&id=${id}`,
     driveViewUrl: `https://drive.google.com/file/d/${id}/view`,
@@ -107,41 +132,92 @@ async function fetchDriveFolderFiles(folderUrl: string): Promise<ParsedDriveFile
   }
 }
 
-// Generate lenses using Gemini with model fallback
+// Generate lenses using Gemini with model fallback and Admin Price Mode decision
 async function analyzeBufferWithGemini(
   buffer: Buffer,
   mimeType: string,
   fileName: string,
-  brandHint?: string
+  brandHint?: string,
+  priceMode: 'wholesale' | 'retail' | 'auto' = 'auto',
+  profitMarkup: number = 2.0,
+  productTypeHint: 'eyeglass_lens' | 'contact_lens' | 'auto' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-flash-latest'];
 
-  const prompt = `Sen Türkiye optik gözlük ve cam sektöründe uzman bir yapay zekasın.
-Verilen dosya (${fileName}) bir optik cam fiyat listesi, toptan/perakende katalogu veya kampanya görselidir.
+  let adminInstruction = '';
+  let detectedListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
+  if (fileName.toLowerCase().includes('pfl') || fileName.toLowerCase().includes('perakende')) {
+    detectedListType = 'perakende';
+  } else if (fileName.toLowerCase().includes('tfl') || fileName.toLowerCase().includes('toptan')) {
+    detectedListType = 'toptan';
+  } else if (fileName.toLowerCase().includes('kampanya') || fileName.toLowerCase().includes('kampanyasi')) {
+    detectedListType = 'kampanya';
+  }
+
+  if (priceMode === 'wholesale' || detectedListType === 'toptan') {
+    adminInstruction = `\n*** YÖNETİCİ TALİMATI: Bu belge KESİNLİKLE TOPTAN (ALIŞ / TFL) FİYAT LİSTESİDİR. Belgedeki tüm fiyat sütunlarını wholesalePrice olarak kaydet.`;
+  } else if (priceMode === 'retail' || detectedListType === 'perakende') {
+    adminInstruction = `\n*** YÖNETİCİ TALİMATI: Bu belge KESİNLİKLE PERAKENDE (TAVSİYE EDİLEN SATIŞ / PFL) FİYAT LİSTESİDİR. Belgedeki tüm fiyatları retailPrice olarak kaydet.`;
+  }
+
+  let productTypeInstruction = '';
+  if (productTypeHint === 'contact_lens' || fileName.toLowerCase().includes('lens') || fileName.toLowerCase().includes('coopervision') || fileName.toLowerCase().includes('opsa') || fileName.toLowerCase().includes('alcon') || fileName.toLowerCase().includes('bausch')) {
+    productTypeInstruction = `\n*** YÖNETİCİ TALİMATI: Bu liste KONTAKT LENS listesidir. productType değerini 'contact_lens' yap, kutu adedi, değişim sıklığı (aylık/günlük/15 günlük), BC eğrisi ve lens tipini (sferik/torik/multifokal/renkli) eksiksiz çıkar.`;
+  } else if (productTypeHint === 'eyeglass_lens') {
+    productTypeInstruction = `\n*** YÖNETİCİ TALİMATI: Bu liste GÖZLÜK CAMI listesidir. productType değerini 'eyeglass_lens' yap.`;
+  }
+
+  const prompt = `Sen Türkiye optik gözlük camı ve kontakt lens sektöründe en üst düzey uzman yapay zekasın.
+Verilen dosya (${fileName}) bir optik cam veya kontakt lens fiyat listesi, toptan (TFL) / perakende (PFL) katalogu, kampanya tablosu veya PDF broşürüdür.
 ${brandHint ? `Öncelikli Marka: ${brandHint}` : ''}
+${adminInstruction}
+${productTypeInstruction}
 
-Lütfen bu belgeden optik cam modellerini, indekslerini, kaplamalarını, toptan ve perakende fiyatlarını tespit et.
-Eğer belgede sadece toptan fiyat varsa wholesalePrice alanına yaz, retailPrice null bırak.
-Eğer belgede sadece perakende fiyat varsa retailPrice alanına yaz, wholesalePrice null bırak.
-Eğer kampanya görseli ise kampanya şartlarını ve modellerini çıkar.
+KRİTİK GÖREV TALİMATLARI:
+1. EKSİKSİZ SATIR SATIR ÇIKARIM (100% EXTRACTION):
+   - Belgede veya tablolarda yer alan TÜM ÜRÜNLERİ, TÜM İNDEKSLERİ (1.50, 1.53 Trivex, 1.56, 1.59 Polikarbon, 1.60 MR-8, 1.67, 1.74, 1.80, 1.90 Mineral/Organik), TÜM KAPLAMALARI VE BÜTÜN DİZAYNLARI eksiksiz olarak JSON listesine ekle.
+   - Kesinlikle örnekleme yapıp ilk 5-10 ürünü alıp kesme; katalogdaki her bir satırı ayrı bir ürün olarak çıkar.
+
+2. TÜRKÇE FİYAT VE PARA BİRİMİ AYRIŞTIRMA (ÇOK ÖNEMLİ):
+   - Türkiye fiyat formatında nokta (.) binlik ayıracıdır, virgül (,) ondalık ayıracıdır.
+   - Örnek: "2.850,00 TL" -> 2850 (Kesinlikle 2.85 yapma!). "1.200 TL" -> 1200, "750,00" -> 750, "18.500" -> 18500.
+   - Eğer fiyat Euro (€) veya Dolar ($) ise currency alanını "EUR" veya "USD" yap, rakamı tam sayı veya ondalıklı olarak aktar.
+   - Eğer liste PERAKENDE (PFL) ise veya tavsiye satış fiyatı içeriyorsa: retailPrice alanını doldur.
+   - Eğer liste TOPTAN (TFL) ise veya optisyen alış fiyatı içeriyorsa: wholesalePrice alanını doldur.
+
+3. ÜRÜN SINIFLANDIRMASI VE DAĞITICI:
+   - Gözlük camları (productType: "eyeglass_lens"): Tek odaklı (single_vision), progresif (progressive), ofis (office), bifokal (bifocal), fotokromik/transitions (photochromic), güneş/polarize (sun_polarized), sürüş (drive), özel üretim (custom_rx).
+   - Kontakt lensler (productType: "contact_lens"): Kutu içeriği (6'lı Kutu, 30'lu Kutu), BC (8.4, 8.6, 8.8), DIA (14.2), değişim süresi (daily, monthly, yearly), lens tipi (spheric, toric, multifocal, color).
+   - DAĞITICI / ÜST FİRMA (distributor): İlgili markanın Türkiye'deki ana distribütörünü belirt (örn: Lens Medikal, HOYA Vision Care & Seiko Optical, Beta Optik (Novax), Carl Zeiss Vision, Opsa Optik, CooperVision Türkiye, EssilorLuxottica, Merve Optik, Alcon Vision Care, Bausch + Lomb).
 
 JSON çıktısı şu formatta OLMALIDIR:
 {
   "brand": "Marka Adı",
+  "distributor": "Üst Dağıtıcı Firma",
+  "listType": "perakende veya toptan veya kampanya",
   "lenses": [
     {
-      "name": "Cam Model Adı (örn: Perfalit 1.60 Solitaire Protect Balance 2)",
+      "name": "Ürün Tam Adı (örn: Perfalit 1.60 Solitaire LayR veya Biofinity Toric 6'lı Kutu)",
       "brand": "Marka Adı",
-      "category": "single_vision veya progressive veya office veya photochromic veya sun_polarized veya custom_rx",
-      "index": "1.50 veya 1.56 veya 1.60 veya 1.67 veya 1.74",
-      "material": "Organik / Polikarbon / Trivex / MR-8 / Mineral",
-      "coating": "Kaplama adı (örn: Antirefle, Crizal, DuraVision, SuperClean)",
+      "distributor": "Dağıtıcı / Üst Firma",
+      "productType": "eyeglass_lens veya contact_lens",
+      "category": "single_vision | progressive | office | photochromic | sun_polarized | drive | contact_lens | custom_rx",
+      "index": "1.50 veya 1.56 veya 1.60 veya 1.67 veya 1.74 veya BC 8.6",
+      "material": "Organik / MR-8 / Silikon Hidrojel / Mineral / Trivex / vb.",
+      "coating": "Kaplama veya lens teknolojisi (örn: Crizal Sapphire, Solitaire LayR, Aquaform, Antirefle)",
       "wholesalePrice": 1250,
       "retailPrice": 2500,
       "currency": "TRY",
       "deliveryType": "stock veya rx",
-      "notes": "Varsa sferik aralık, kampanya notu veya teslimat özelliği"
+      "boxContent": "6'lı Kutu veya 30'lu Kutu (kontakt lens ise)",
+      "wearPeriod": "daily veya monthly veya yearly (kontakt lens ise)",
+      "lensType": "spheric veya toric veya multifocal veya color (kontakt lens ise)",
+      "baseCurve": "8.4 veya 8.6 (kontakt lens ise)",
+      "diameter": "14.2 veya 65/70/75",
+      "sphRange": "-12.00 / +8.00",
+      "cylMax": 2.0,
+      "notes": "Ek açıklama veya özellikler"
     }
   ]
 }
@@ -149,9 +225,39 @@ Sadece geçerli bir JSON döndür.`;
 
   let lastError: any = null;
 
+  // Helper to parse Turkish string prices into clean numbers
+  const parseTurkishPrice = (raw: any): number => {
+    if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
+    if (!raw) return 0;
+    const str = String(raw).trim().replace(/TL|TRY|₺|\$|€/gi, '').trim();
+    // Check format like 1.250,50 or 1.250
+    if (str.includes('.') && str.includes(',')) {
+      const clean = str.replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(clean);
+      return isNaN(num) ? 0 : num;
+    }
+    if (str.includes(',') && !str.includes('.')) {
+      const clean = str.replace(',', '.');
+      const num = parseFloat(clean);
+      return isNaN(num) ? 0 : num;
+    }
+    if (str.includes('.') && !str.includes(',')) {
+      // Could be thousands dot like 1.250 or 25.000
+      const parts = str.split('.');
+      if (parts.length === 2 && parts[1].length === 3) {
+        const num = parseFloat(parts[0] + parts[1]);
+        return isNaN(num) ? 0 : num;
+      }
+      const num = parseFloat(str);
+      return isNaN(num) ? 0 : num;
+    }
+    const num = parseFloat(str);
+    return isNaN(num) ? 0 : num;
+  };
+
   for (const modelName of modelsToTry) {
     try {
-      console.log(`[Gemini] Scanning ${fileName} with model ${modelName}...`);
+      console.log(`[Gemini] Scanning ${fileName} with model ${modelName} (priceMode: ${priceMode})...`);
       const response = await ai.models.generateContent({
         model: modelName,
         contents: [
@@ -165,32 +271,109 @@ Sadece geçerli bir JSON döndür.`;
         ],
         config: {
           responseMimeType: 'application/json',
+          temperature: 0.1,
+          maxOutputTokens: 65536,
         },
       });
 
       const rawText = response.text || '{}';
       const parsed = JSON.parse(rawText.trim());
       const rawLenses = Array.isArray(parsed) ? parsed : (parsed.lenses || []);
+      const fileListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 
+        parsed.listType || detectedListType;
       
-      // Standardize extracted lenses with IDs
-      const lenses = rawLenses.map((l: any, idx: number) => ({
-        id: `drive-ai-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-        brand: l.brand || parsed.brand || brandHint || 'Genel',
-        name: l.name || `${brandHint || 'Optik'} Cam`,
-        category: l.category || 'single_vision',
-        index: l.index ? String(l.index).replace(',', '.') : '1.56',
-        material: l.material || 'Organik',
-        coating: l.coating || 'Standart Antirefle',
-        wholesalePrice: Number(l.wholesalePrice) || 0,
-        retailPrice: Number(l.retailPrice) || (Number(l.wholesalePrice) ? Number(l.wholesalePrice) * 2 : 0),
-        currency: l.currency || 'TRY',
-        deliveryType: l.deliveryType || 'stock',
-        notes: l.notes || `Google Drive'dan tarandı (${fileName})`,
-        updatedAt: new Date().toISOString().split('T')[0],
-      }));
+      // Standardize extracted lenses with IDs and apply manager's pricing rules
+      const lenses = rawLenses.map((l: any, idx: number) => {
+        const lowerName = (l.name || '').toLowerCase();
+        const lowerBrand = (l.brand || parsed.brand || brandHint || '').toLowerCase();
+        const isCooper = lowerBrand.includes('cooper') || lowerBrand === 'cv' || lowerBrand.startsWith('cv ') || lowerName.includes('cv ') || lowerName.includes('biofinity') || lowerName.includes('clariti') || lowerName.includes('myday') || lowerName.includes('avaira') || lowerName.includes('biomedics') || lowerName.includes('proclear');
+        const isLens = 
+          productTypeHint === 'contact_lens' ||
+          l.productType === 'contact_lens' ||
+          l.category === 'contact_lens' ||
+          isCooper ||
+          lowerBrand.includes('opsa') ||
+          lowerBrand.includes('desio') ||
+          lowerBrand.includes('adore') ||
+          lowerBrand.includes('bausch') ||
+          lowerBrand.includes('alcon') ||
+          lowerBrand.includes('johnson') ||
+          lowerBrand.includes('lens') ||
+          lowerName.includes('lens') ||
+          lowerName.includes('biofinity') ||
+          lowerName.includes('clariti') ||
+          lowerName.includes('myday') ||
+          lowerName.includes('avaira') ||
+          lowerName.includes('purevision') ||
+          lowerName.includes('ultra') ||
+          lowerName.includes('kutu');
+
+        let wholesale = parseTurkishPrice(l.wholesalePrice);
+        let retail = parseTurkishPrice(l.retailPrice);
+
+        // Apply admin price mode decision
+        if (priceMode === 'wholesale' || fileListType === 'toptan') {
+          // TOPTAN LİSTE (TFL): Listede yazan fiyat optisyen toptan alış maliyetidir.
+          // Perakende satış fiyatı yöneticinin belirlediği kâr çarpanı ile hesaplanır.
+          if (wholesale === 0 && retail > 0) {
+            wholesale = retail;
+          }
+          if (retail === 0 || retail === wholesale) {
+            retail = Math.round(wholesale * profitMarkup);
+          }
+        } else if (priceMode === 'retail' || fileListType === 'perakende') {
+          // PERAKENDE LİSTE (PFL): Listede zaten tavsiye edilen perakende satış fiyatı yer alır.
+          // KESİNLİKLE KÂR ÇARPANI UYGULANMAZ. Listede yazan fiyat doğrudan perakende satış fiyatıdır.
+          if (retail === 0 && wholesale > 0) {
+            retail = wholesale;
+          }
+          // Toptan liste fiyatı perakende liste fiyatı ile aynıdır; optisyen alış maliyeti marka iskontosundan düşülecektir.
+          wholesale = 0;
+        } else {
+          // OTOMATİK (AUTO):
+          if (wholesale > 0 && retail === 0) {
+            retail = Math.round(wholesale * profitMarkup);
+          } else if (retail > 0 && wholesale === 0) {
+            wholesale = 0;
+          }
+        }
+
+        const finalBrand = isCooper
+          ? 'CooperVision'
+          : l.brand || parsed.brand || brandHint || (isLens ? 'CooperVision' : 'Genel Optik');
+
+        const finalDistributor = l.distributor || parsed.distributor || undefined;
+
+        return {
+          id: `drive-ai-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+          brand: finalBrand,
+          distributor: finalDistributor,
+          name: l.name || (isLens ? 'Kontakt Lens' : 'Optik Cam'),
+          productType: isLens ? 'contact_lens' : 'eyeglass_lens',
+          category: isLens ? 'contact_lens' : (l.category || 'single_vision'),
+          index: l.index ? String(l.index).replace(',', '.') : (isLens ? 'BC 8.6' : '1.56'),
+          material: l.material || (isLens ? 'Silikon Hidrojel' : 'Organik'),
+          coating: l.coating || (isLens ? 'Nemlendirici Matriks' : 'Standart Antirefle'),
+          wholesalePrice: wholesale,
+          retailPrice: retail,
+          currency: l.currency || 'TRY',
+          deliveryType: l.deliveryType || 'stock',
+          sphRange: l.sphRange,
+          cylMax: l.cylMax ? Number(l.cylMax) : undefined,
+          diameter: l.diameter,
+          baseCurve: l.baseCurve || (isLens ? '8.6' : undefined),
+          boxContent: l.boxContent || (isLens ? '6\'lı Kutu' : undefined),
+          wearPeriod: l.wearPeriod || (isLens ? 'monthly' : undefined),
+          lensType: l.lensType || (isLens ? 'spheric' : undefined),
+          sourceFileName: fileName,
+          sourceListType: fileListType,
+          notes: l.notes || `Google Drive'dan tarandı (${fileName})`,
+          updatedAt: new Date().toISOString().split('T')[0],
+        };
+      });
 
       return {
-        brand: parsed.brand || brandHint || 'Optik',
+        brand: parsed.brand || brandHint || (productTypeHint === 'contact_lens' ? 'Kontakt Lens' : 'Optik'),
         lenses,
         modelUsed: modelName,
       };
@@ -208,6 +391,49 @@ Sadece geçerli bir JSON döndür.`;
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Proxy download remote Google Drive or Sheet URL (bypassing browser CORS)
+app.get('/api/drive/fetch-file', async (req, res) => {
+  try {
+    const rawUrl = req.query.url as string;
+    if (!rawUrl) {
+      return res.status(400).json({ success: false, error: 'url parametresi zorunludur.' });
+    }
+
+    let targetUrl = rawUrl.trim();
+    // Check if it's a Google Sheet
+    const sheetMatch = rawUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (sheetMatch && sheetMatch[1]) {
+      targetUrl = `https://docs.google.com/spreadsheets/d/${sheetMatch[1]}/gviz/tq?tqx=out:csv`;
+    } else {
+      const driveFileMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || rawUrl.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+      if (driveFileMatch && driveFileMatch[1]) {
+        targetUrl = `https://drive.google.com/uc?export=download&id=${driveFileMatch[1]}`;
+      }
+    }
+
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        success: false,
+        error: `Google Drive dosyasına erişilemedi (HTTP ${response.status})`,
+      });
+    }
+
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    const arrayBuffer = await response.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (err: any) {
+    console.error('Error in proxy fetch-file:', err);
+    res.status(500).json({ success: false, error: err.message || 'Dosya indirilemedi.' });
+  }
 });
 
 // List files in Google Drive folder
@@ -233,12 +459,12 @@ app.get('/api/drive/files', async (req, res) => {
 // Scan a specific file from Google Drive
 app.post('/api/drive/scan-file', async (req, res) => {
   try {
-    const { fileId, fileName, mimeType, brandHint } = req.body;
+    const { fileId, fileName, mimeType, brandHint, priceMode, profitMarkup, productTypeHint } = req.body;
     if (!fileId) {
       return res.status(400).json({ success: false, error: 'fileId zorunludur.' });
     }
 
-    console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId})...`);
+    console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId}) with priceMode: ${priceMode}...`);
     const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
     const fileRes = await fetch(downloadUrl, {
       headers: {
@@ -261,7 +487,10 @@ app.post('/api/drive/scan-file', async (req, res) => {
       buffer,
       mimeType || 'application/pdf',
       fileName || 'price_list.pdf',
-      brandHint
+      brandHint,
+      priceMode || 'auto',
+      profitMarkup || 2.0,
+      productTypeHint || 'auto'
     );
 
     res.json({
@@ -285,7 +514,7 @@ app.post('/api/drive/scan-file', async (req, res) => {
 // Upload and scan local file (PDF or image)
 app.post('/api/drive/upload-scan', async (req, res) => {
   try {
-    const { fileData, fileName, mimeType, brandHint } = req.body;
+    const { fileData, fileName, mimeType, brandHint, priceMode, profitMarkup, productTypeHint } = req.body;
     if (!fileData) {
       return res.status(400).json({ success: false, error: 'fileData (base64) zorunludur.' });
     }
@@ -298,7 +527,10 @@ app.post('/api/drive/upload-scan', async (req, res) => {
       buffer,
       mimeType || 'application/pdf',
       fileName || 'uploaded_doc.pdf',
-      brandHint
+      brandHint,
+      priceMode || 'auto',
+      profitMarkup || 2.0,
+      productTypeHint || 'auto'
     );
 
     res.json({
