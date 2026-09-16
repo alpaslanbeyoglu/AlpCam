@@ -143,7 +143,7 @@ async function analyzeBufferWithGemini(
   productTypeHint: 'eyeglass_lens' | 'contact_lens' | 'auto' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];
+  const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
 
   let adminInstruction = '';
   let detectedListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
@@ -255,35 +255,39 @@ Sadece geçerli bir JSON döndür.`;
     return isNaN(num) ? 0 : num;
   };
 
-  for (const modelName of modelsToTry) {
-    try {
-      console.log(`[Gemini] Scanning ${fileName} with model ${modelName} (priceMode: ${priceMode})...`);
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: [
-          {
-            inlineData: {
-              mimeType: mimeType.includes('pdf') ? 'application/pdf' : 'image/jpeg',
-              data: b64,
-            },
-          },
-          { text: prompt },
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-          maxOutputTokens: 65536,
-        },
-      });
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-      const rawText = response.text || '{}';
-      const parsed = JSON.parse(rawText.trim());
-      const rawLenses = Array.isArray(parsed) ? parsed : (parsed.lenses || []);
-      const fileListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 
-        parsed.listType || detectedListType;
-      
-      // Standardize extracted lenses with IDs and apply manager's pricing rules
-      const lenses = rawLenses.map((l: any, idx: number) => {
+  for (const modelName of modelsToTry) {
+    let retries = 2; // 2 retries per model
+    while (retries >= 0) {
+      try {
+        console.log(`[Gemini] Scanning ${fileName} with model ${modelName} (priceMode: ${priceMode})...`);
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            {
+              inlineData: {
+                mimeType: mimeType.includes('pdf') ? 'application/pdf' : 'image/jpeg',
+                data: b64,
+              },
+            },
+            { text: prompt },
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+            maxOutputTokens: 65536,
+          },
+        });
+
+        const rawText = response.text || '{}';
+        const parsed = JSON.parse(rawText.trim());
+        const rawLenses = Array.isArray(parsed) ? parsed : (parsed.lenses || []);
+        const fileListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 
+          parsed.listType || detectedListType;
+        
+        // Standardize extracted lenses with IDs and apply manager's pricing rules
+        const lenses = rawLenses.map((l: any, idx: number) => {
         const lowerName = (l.name || '').toLowerCase();
         const lowerBrand = (l.brand || parsed.brand || brandHint || '').toLowerCase();
         const isCooper = lowerBrand.includes('cooper') || lowerBrand === 'cv' || lowerBrand.startsWith('cv ') || lowerName.includes('cv ') || lowerName.includes('biofinity') || lowerName.includes('clariti') || lowerName.includes('myday') || lowerName.includes('avaira') || lowerName.includes('biomedics') || lowerName.includes('proclear');
@@ -378,8 +382,22 @@ Sadece geçerli bir JSON döndür.`;
         modelUsed: modelName,
       };
     } catch (err: any) {
-      console.warn(`[Gemini] Model ${modelName} failed on ${fileName}:`, err?.message || err);
-      lastError = err;
+        console.warn(`[Gemini] Model ${modelName} failed (retries left: ${retries}):`, err?.message || err);
+        lastError = err;
+        
+        // Wait and retry if it's a 503 or 429
+        if (err?.status === 503 || err?.message?.includes('503') || err?.status === 429 || err?.message?.includes('429')) {
+          retries--;
+          if (retries >= 0) {
+            console.log(`[Gemini] Waiting 5 seconds before retrying ${modelName}...`);
+            await delay(5000);
+            continue;
+          }
+        }
+        
+        // Break out of the while loop to move to the next model
+        break;
+      }
     }
   }
 
@@ -551,7 +569,7 @@ app.post('/api/drive/upload-scan', async (req, res) => {
 
 // Start Express server and mount Vite middleware
 async function start() {
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -570,4 +588,9 @@ async function start() {
   });
 }
 
-start();
+// Vercel Serverless Function ortamında `listen` yerine `app` dışa aktarılır.
+if (!process.env.VERCEL) {
+  start();
+}
+
+export default app;
