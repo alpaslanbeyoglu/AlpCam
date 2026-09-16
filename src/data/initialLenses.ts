@@ -1,6 +1,8 @@
 import { Lens } from '../types';
+import { DRIVE_EXTRACTED_LENSES } from './driveScannedCatalog';
 
 export const INITIAL_LENSES: Lens[] = [
+  ...DRIVE_EXTRACTED_LENSES,
   // ESSILOR
   {
     id: 'essilor-orma-150-crizal-easy',

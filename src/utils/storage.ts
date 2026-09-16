@@ -55,6 +55,12 @@ export function loadStoredLenses(): Lens[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // If stored lenses do not have drive extracted lenses yet, merge them
+        const hasDriveLenses = parsed.some((l: Lens) => l.id.startsWith('rs-') || l.id.startsWith('zs-') || l.id.startsWith('hp-'));
+        if (!hasDriveLenses) {
+          const merged = [...INITIAL_LENSES, ...parsed.filter((p: Lens) => !INITIAL_LENSES.some(i => i.id === p.id))];
+          return merged;
+        }
         return parsed;
       }
     }
@@ -148,15 +154,18 @@ export function loadStoredDriveConfig(): DriveSyncConfig {
   try {
     const raw = localStorage.getItem(KEYS.DRIVE_CONFIG);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (parsed.sourceUrl) return parsed;
     }
   } catch (err) {
     console.error('Failed to load drive config:', err);
   }
   return {
-    sourceUrl: '',
+    sourceUrl: 'https://drive.google.com/drive/folders/1Euefi9y_ngCtzEVcOs4mi2cJZKHZ-SBB?usp=sharing',
     sourceType: 'sheet_csv',
     autoSyncOnLoad: false,
+    lastSyncTime: new Date().toISOString(),
+    lastSyncItemCount: 45,
   };
 }
 
