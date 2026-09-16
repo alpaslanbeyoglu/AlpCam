@@ -1,0 +1,571 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Lens, BrandDiscount, CustomList, DriveSyncConfig } from './types';
+import { INITIAL_LENSES } from './data/initialLenses';
+import { INITIAL_DISCOUNTS } from './data/initialDiscounts';
+import {
+  loadStoredLenses,
+  saveStoredLenses,
+  loadStoredDiscounts,
+  saveStoredDiscounts,
+  loadStoredCustomLists,
+  saveStoredCustomLists,
+  loadStoredDriveConfig,
+  saveStoredDriveConfig,
+  loadCustomerMode,
+  saveCustomerMode,
+  loadPairCount,
+  savePairCount,
+  loadAdminPin,
+  saveAdminPin,
+  loadIsAdminSession,
+  saveIsAdminSession,
+} from './utils/storage';
+import { fetchFromDriveUrl, parseExcelOrCsvData } from './utils/driveSync';
+
+// Components
+import { Navbar } from './components/Navbar';
+import { LensSearchBar } from './components/LensSearchBar';
+import { LensCard } from './components/LensCard';
+import { LensCompactRow } from './components/LensCompactRow';
+import { LensDetailModal } from './components/LensDetailModal';
+import { BrandDiscountsView } from './components/BrandDiscountsView';
+import { CustomListsView } from './components/CustomListsView';
+import { DriveSyncView } from './components/DriveSyncView';
+import { GithubGuideView } from './components/GithubGuideView';
+import { AddLensModal } from './components/AddLensModal';
+import { AdminLoginModal } from './components/AdminLoginModal';
+
+import {
+  Plus,
+  Sparkles,
+  Cloud,
+  FileSpreadsheet,
+  CheckCircle2,
+  Sliders,
+  FolderHeart,
+  Search,
+} from 'lucide-react';
+
+export default function App() {
+  // Navigation
+  const [activeTab, setActiveTab] = useState<
+    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'github_guide'
+  >('catalog');
+
+  // Core Data
+  const [lenses, setLenses] = useState<Lens[]>(() => loadStoredLenses());
+  const [brandDiscounts, setBrandDiscounts] = useState<BrandDiscount[]>(() => loadStoredDiscounts());
+  const [customLists, setCustomLists] = useState<CustomList[]>(() => loadStoredCustomLists());
+  const [driveConfig, setDriveConfig] = useState<DriveSyncConfig>(() => loadStoredDriveConfig());
+
+  // App Settings
+  const [isCustomerMode, setIsCustomerMode] = useState<boolean>(() => loadCustomerMode());
+  const [pairCount, setPairCount] = useState<1 | 2>(() => loadPairCount());
+
+  // Administrator Role & PIN
+  const [adminPin, setAdminPin] = useState<string>(() => loadAdminPin());
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => loadIsAdminSession());
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+
+  // Search & Filter State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('all');
+  const [selectedIndex, setSelectedIndex] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedDelivery, setSelectedDelivery] = useState<'all' | 'stock' | 'rx'>('all');
+  const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'name_asc' | 'index_asc'>('price_asc');
+  const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [sphCheck, setSphCheck] = useState('');
+  const [cylCheck, setCylCheck] = useState('');
+
+  // Modals & Feedback
+  const [detailLens, setDetailLens] = useState<Lens | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Persistence Effects
+  useEffect(() => {
+    saveStoredLenses(lenses);
+  }, [lenses]);
+
+  useEffect(() => {
+    saveStoredDiscounts(brandDiscounts);
+  }, [brandDiscounts]);
+
+  useEffect(() => {
+    saveStoredCustomLists(customLists);
+  }, [customLists]);
+
+  useEffect(() => {
+    saveStoredDriveConfig(driveConfig);
+  }, [driveConfig]);
+
+  useEffect(() => {
+    saveCustomerMode(isCustomerMode);
+  }, [isCustomerMode]);
+
+  useEffect(() => {
+    savePairCount(pairCount);
+  }, [pairCount]);
+
+  useEffect(() => {
+    saveAdminPin(adminPin);
+  }, [adminPin]);
+
+  useEffect(() => {
+    saveIsAdminSession(isAdmin);
+  }, [isAdmin]);
+
+  // Auto-sync on startup if enabled
+  useEffect(() => {
+    if (driveConfig.autoSyncOnLoad && driveConfig.sourceUrl) {
+      handleDriveAutoSync();
+    }
+  }, []);
+
+  const handleDriveAutoSync = async () => {
+    if (!driveConfig.sourceUrl) return;
+    setIsSyncing(true);
+    try {
+      const buffer = await fetchFromDriveUrl(driveConfig.sourceUrl);
+      const res = parseExcelOrCsvData(buffer);
+      if (res.success && res.lenses.length > 0) {
+        setLenses(res.lenses);
+        setDriveConfig((prev) => ({
+          ...prev,
+          lastSyncTime: new Date().toISOString(),
+          lastSyncItemCount: res.lenses.length,
+        }));
+        showToast(`Google Drive'dan ${res.lenses.length} cam otomatik güncellendi`);
+      }
+    } catch (err) {
+      console.error('Auto sync failed:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Available brands and indices from current lenses
+  const availableBrands = useMemo(() => {
+    const set = new Set<string>();
+    lenses.forEach((l) => {
+      if (l.brand) set.add(l.brand.trim());
+    });
+    return Array.from(set).sort();
+  }, [lenses]);
+
+  const availableIndices = useMemo(() => {
+    const set = new Set<string>();
+    lenses.forEach((l) => {
+      if (l.index) set.add(l.index.trim());
+    });
+    return Array.from(set).sort((a, b) => parseFloat(a) - parseFloat(b));
+  }, [lenses]);
+
+  // Fast filter & search algorithm
+  const filteredLenses = useMemo(() => {
+    return lenses.filter((lens) => {
+      // 1. Text Search (multi-term search)
+      if (searchTerm.trim()) {
+        const queryTerms = searchTerm.toLowerCase().trim().split(/\s+/);
+        const targetString = `${lens.brand} ${lens.name} ${lens.index} ${lens.coating} ${lens.material} ${lens.notes || ''}`.toLowerCase();
+        const matchesAllTerms = queryTerms.every((term) => targetString.includes(term));
+        if (!matchesAllTerms) return false;
+      }
+
+      // 2. Brand
+      if (selectedBrand !== 'all') {
+        if (lens.brand.trim().toLowerCase() !== selectedBrand.trim().toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 3. Index
+      if (selectedIndex !== 'all') {
+        if (lens.index.trim() !== selectedIndex.trim()) {
+          return false;
+        }
+      }
+
+      // 4. Category
+      if (selectedCategory !== 'all') {
+        if (lens.category !== selectedCategory) {
+          return false;
+        }
+      }
+
+      // 5. Delivery type (Stock vs RX)
+      if (selectedDelivery !== 'all') {
+        if (lens.deliveryType !== selectedDelivery) {
+          return false;
+        }
+      }
+
+      // 6. SPH range check
+      if (sphCheck.trim() && lens.sphRange) {
+        const sphNum = parseFloat(sphCheck.replace(',', '.'));
+        if (!isNaN(sphNum)) {
+          // Parse e.g. "-6.00 / +4.00"
+          const parts = lens.sphRange.match(/([+-]?\d+(?:\.\d+)?)/g);
+          if (parts && parts.length >= 2) {
+            const min = parseFloat(parts[0]);
+            const max = parseFloat(parts[1]);
+            const realMin = Math.min(min, max);
+            const realMax = Math.max(min, max);
+            if (sphNum < realMin || sphNum > realMax) {
+              return false;
+            }
+          }
+        }
+      }
+
+      // 7. CYL check
+      if (cylCheck.trim() && lens.cylMax !== undefined) {
+        const cylNum = Math.abs(parseFloat(cylCheck.replace(',', '.')));
+        if (!isNaN(cylNum)) {
+          if (cylNum > lens.cylMax) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      if (sortBy === 'price_asc') {
+        return a.retailPrice - b.retailPrice;
+      }
+      if (sortBy === 'price_desc') {
+        return b.retailPrice - a.retailPrice;
+      }
+      if (sortBy === 'index_asc') {
+        return parseFloat(a.index) - parseFloat(b.index);
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [
+    lenses,
+    searchTerm,
+    selectedBrand,
+    selectedIndex,
+    selectedCategory,
+    selectedDelivery,
+    sortBy,
+    sphCheck,
+    cylCheck,
+  ]);
+
+  // Add to active custom list
+  const handleAddToList = (lens: Lens, targetListId?: string, customPrice?: number) => {
+    let listId = targetListId;
+    let currentLists = [...customLists];
+
+    if (currentLists.length === 0) {
+      const defaultList: CustomList = {
+        id: `list-${Date.now()}`,
+        name: 'Yeni Liste',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        items: [],
+      };
+      currentLists.push(defaultList);
+      listId = defaultList.id;
+    } else if (!listId) {
+      listId = currentLists[0].id;
+    }
+
+    const updatedLists = currentLists.map((list) => {
+      if (list.id === listId) {
+        const newItem = {
+          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          lensId: lens.id,
+          lensSnapshot: lens,
+          quantity: pairCount,
+          customRetailPrice: customPrice,
+        };
+        return {
+          ...list,
+          items: [...list.items, newItem],
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return list;
+    });
+
+    setCustomLists(updatedLists);
+    showToast(`"${lens.name}" listeye eklendi`);
+  };
+
+  const handleUpdateLenses = (newLenses: Lens[], mode: 'replace' | 'merge') => {
+    if (mode === 'replace') {
+      setLenses(newLenses);
+    } else {
+      // Merge unique
+      const existingIds = new Set(lenses.map((l) => l.name.toLowerCase()));
+      const filteredNew = newLenses.filter((l) => !existingIds.has(l.name.toLowerCase()));
+      setLenses([...lenses, ...filteredNew]);
+    }
+  };
+
+  const handleResetCatalog = () => {
+    setLenses(INITIAL_LENSES);
+    showToast('Katalog varsayılan fabrika listesine sıfırlandı');
+  };
+
+  const activeList = customLists[0];
+  const isLensInActiveList = (lensId: string) => {
+    return activeList?.items.some((i) => i.lensId === lensId) || false;
+  };
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setSelectedBrand('all');
+    setSelectedIndex('all');
+    setSelectedCategory('all');
+    setSelectedDelivery('all');
+    setSphCheck('');
+    setCylCheck('');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-sky-500 selection:text-white pb-16 sm:pb-8">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 backdrop-blur-md animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Main Navbar */}
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        isCustomerMode={isCustomerMode}
+        setIsCustomerMode={setIsCustomerMode}
+        pairCount={pairCount}
+        setPairCount={setPairCount}
+        customListCount={customLists.reduce((acc, l) => acc + l.items.length, 0)}
+        lastSyncTime={driveConfig.lastSyncTime}
+        onQuickSync={driveConfig.sourceUrl ? handleDriveAutoSync : () => setActiveTab('drive_sync')}
+        isSyncing={isSyncing}
+        isAdmin={isAdmin}
+        onOpenAdminModal={() => setIsAdminModalOpen(true)}
+      />
+
+      {/* Main Tab Views */}
+      <main className="flex-1">
+        {/* TAB 1: CATALOG & INSTANT SEARCH */}
+        {activeTab === 'catalog' && (
+          <div>
+            {/* Search and Filters Bar */}
+            <LensSearchBar
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              selectedBrand={selectedBrand}
+              setSelectedBrand={setSelectedBrand}
+              availableBrands={availableBrands}
+              selectedIndex={selectedIndex}
+              setSelectedIndex={setSelectedIndex}
+              availableIndices={availableIndices}
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
+              selectedDelivery={selectedDelivery}
+              setSelectedDelivery={setSelectedDelivery}
+              sortBy={sortBy}
+              setSortBy={setSortBy}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              showAdvanced={showAdvanced}
+              setShowAdvanced={setShowAdvanced}
+              sphCheck={sphCheck}
+              setSphCheck={setSphCheck}
+              cylCheck={cylCheck}
+              setCylCheck={setCylCheck}
+              totalMatches={filteredLenses.length}
+              onResetFilters={resetFilters}
+            />
+
+            {/* Results Grid / List */}
+            <div className="max-w-7xl mx-auto p-3 sm:p-4">
+              {filteredLenses.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3 mt-4">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                    <Search className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Aradığınız kriterlere uygun cam bulunamadı</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                      Arama terimini değiştirebilir veya filtreleri sıfırlayabilirsiniz.
+                    </p>
+                  </div>
+                  <button
+                    onClick={resetFilters}
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition"
+                  >
+                    Filtreleri Temizle
+                  </button>
+                </div>
+              ) : viewMode === 'cards' ? (
+                /* Cards View */
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                  {filteredLenses.map((lens) => (
+                    <LensCard
+                      key={lens.id}
+                      lens={lens}
+                      brandDiscounts={brandDiscounts}
+                      pairCount={pairCount}
+                      isCustomerMode={isCustomerMode}
+                      onOpenDetails={(l) => setDetailLens(l)}
+                      onAddToList={(l) => handleAddToList(l)}
+                      isAddedToActiveList={isLensInActiveList(lens.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                /* Compact List View */
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                  <div className="divide-y divide-slate-100">
+                    {filteredLenses.map((lens) => (
+                      <LensCompactRow
+                        key={lens.id}
+                        lens={lens}
+                        brandDiscounts={brandDiscounts}
+                        pairCount={pairCount}
+                        isCustomerMode={isCustomerMode}
+                        onOpenDetails={(l) => setDetailLens(l)}
+                        onAddToList={(l) => handleAddToList(l)}
+                        isAddedToActiveList={isLensInActiveList(lens.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Floating Action Button to Add Custom Lens (Admin Only or prompts Login) */}
+            <div className="fixed bottom-4 right-4 z-30 sm:bottom-6 sm:right-6">
+              <button
+                onClick={() => {
+                  if (!isAdmin) {
+                    setIsAdminModalOpen(true);
+                    showToast('Kataloğa yeni cam eklemek için Yönetici Girişi gereklidir');
+                  } else {
+                    setIsAddModalOpen(true);
+                  }
+                }}
+                className={`flex items-center gap-2 px-4 py-3 rounded-full text-white shadow-lg hover:shadow-xl transition text-xs font-bold ${
+                  isAdmin ? 'bg-slate-900 hover:bg-slate-800' : 'bg-slate-800 hover:bg-slate-700'
+                }`}
+                title={isAdmin ? 'Kataloğa Yeni Cam Ekle' : 'Kataloğa Cam Ekle (Yönetici Girişi Gerekir)'}
+              >
+                <Plus className="w-4 h-4 text-sky-400" />
+                <span className="hidden xs:inline">Yeni Cam Ekle</span>
+                {!isAdmin && (
+                  <span className="bg-amber-500/30 text-amber-300 text-[10px] px-1.5 py-0.5 rounded-md border border-amber-500/40">
+                    Yönetici
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: CUSTOM LISTS */}
+        {activeTab === 'custom_lists' && (
+          <CustomListsView
+            customLists={customLists}
+            onUpdateLists={setCustomLists}
+            brandDiscounts={brandDiscounts}
+            isCustomerMode={isCustomerMode}
+            pairCount={pairCount}
+            onOpenCatalog={() => setActiveTab('catalog')}
+          />
+        )}
+
+        {/* TAB 3: BRAND DISCOUNTS */}
+        {activeTab === 'discounts' && (
+          <BrandDiscountsView
+            discounts={brandDiscounts}
+            onSaveDiscounts={setBrandDiscounts}
+            availableBrands={availableBrands}
+          />
+        )}
+
+        {/* TAB 4: GOOGLE DRIVE SYNC */}
+        {activeTab === 'drive_sync' && (
+          <DriveSyncView
+            config={driveConfig}
+            onSaveConfig={setDriveConfig}
+            lenses={lenses}
+            onUpdateLenses={handleUpdateLenses}
+            onResetToDefaultCatalog={handleResetCatalog}
+            isAdmin={isAdmin}
+            onOpenAdminModal={() => setIsAdminModalOpen(true)}
+          />
+        )}
+
+        {/* TAB 5: GITHUB PAGES GUIDE */}
+        {activeTab === 'github_guide' && <GithubGuideView />}
+      </main>
+
+      {/* Lens Detail Modal */}
+      {detailLens && (
+        <LensDetailModal
+          lens={detailLens}
+          onClose={() => setDetailLens(null)}
+          brandDiscounts={brandDiscounts}
+          pairCount={pairCount}
+          isCustomerMode={isCustomerMode}
+          customLists={customLists}
+          onAddToList={(lens, listId, customPrice) => {
+            handleAddToList(lens, listId, customPrice);
+          }}
+        />
+      )}
+
+      {/* Manual Add Lens Modal */}
+      <AddLensModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAddLens={(newLens) => {
+          setLenses([newLens, ...lenses]);
+          showToast(`"${newLens.name}" kataloğa eklendi`);
+        }}
+        existingBrands={availableBrands}
+      />
+
+      {/* Admin Login & Security Modal */}
+      <AdminLoginModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        isAdmin={isAdmin}
+        adminPin={adminPin}
+        onLoginSuccess={() => {
+          setIsAdmin(true);
+          showToast('👑 Yönetici Girişi Yapıldı (Tüm Yetkiler Açık)');
+        }}
+        onLogout={() => {
+          setIsAdmin(false);
+          showToast('Yönetici Oturumu Kapatıldı (Optisyen Modu Aktif)');
+        }}
+        onChangePin={(newPin) => {
+          setAdminPin(newPin);
+          saveAdminPin(newPin);
+          showToast('Yönetici PIN şifresi başarıyla güncellendi');
+        }}
+      />
+    </div>
+  );
+}
