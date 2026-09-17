@@ -286,7 +286,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
       message: 'Drive klasöründeki belgeler yönetici kurallarıyla taranıyor...',
     });
 
-    const targetFiles = driveFiles.slice(0, 8); // Scan top prioritized files
+    const targetFiles = driveFiles; // Scan all detected files from the drive folder
     let accumulatedLenses: Lens[] = [];
 
     for (let i = 0; i < targetFiles.length; i++) {
@@ -920,7 +920,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                     className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 disabled:opacity-50"
                   >
                     <Sparkles className="w-4 h-4" />
-                    <span>Tüm Drive Klasörünü AI ile Tara (19 Belge)</span>
+                    <span>Tüm Drive Klasörünü AI ile Tara ({driveFiles.length} Belge)</span>
                   </button>
 
                   <button
