@@ -103,36 +103,37 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
     selectedProductType === 'contact_lens' ? CONTACT_LENS_CATEGORIES : EYEGLASS_CATEGORIES;
 
   return (
-    <div className="bg-white border-b border-slate-200 px-3 sm:px-4 py-3 space-y-2.5">
+    <div className="bg-white border-b border-slate-200 px-2 sm:px-4 py-2 sm:py-3 space-y-1.5 sm:space-y-2.5">
       {/* Top Product Type Separation Tabs (Cam vs Kontakt Lens) */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+        <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200/80">
           <button
             onClick={() => setSelectedProductType('all')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-xs font-bold transition flex items-center gap-1 ${
               selectedProductType === 'all'
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <span>Tüm Ürünler</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-slate-200/80 text-[10px] text-slate-700">
+            <span>Tümü</span>
+            <span className="px-1 py-0.2 rounded-full bg-slate-200/80 text-[9px] text-slate-700">
               {eyeglassCount + contactLensCount}
             </span>
           </button>
 
           <button
             onClick={() => setSelectedProductType('eyeglass_lens')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-xs font-bold transition flex items-center gap-1 ${
               selectedProductType === 'eyeglass_lens'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-blue-700'
             }`}
           >
-            <Glasses className="w-3.5 h-3.5" />
-            <span>Gözlük Camları</span>
+            <Glasses className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span className="hidden xs:inline">Gözlük Camları</span>
+            <span className="inline xs:hidden">Camlar</span>
             <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              className={`px-1 py-0.2 rounded-full text-[9px] ${
                 selectedProductType === 'eyeglass_lens'
                   ? 'bg-blue-700 text-white'
                   : 'bg-slate-200/80 text-slate-700'
@@ -144,16 +145,17 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
 
           <button
             onClick={() => setSelectedProductType('contact_lens')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-xs font-bold transition flex items-center gap-1 ${
               selectedProductType === 'contact_lens'
                 ? 'bg-teal-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-teal-700'
             }`}
           >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Kontakt Lensler</span>
+            <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span className="hidden xs:inline">Kontakt Lensler</span>
+            <span className="inline xs:hidden">Lensler</span>
             <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              className={`px-1 py-0.2 rounded-full text-[9px] ${
                 selectedProductType === 'contact_lens'
                   ? 'bg-teal-700 text-white'
                   : 'bg-slate-200/80 text-slate-700'
@@ -165,33 +167,33 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
         </div>
 
         {/* View Mode (Cards vs Compact Table) */}
-        <div className="hidden xs:flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+        <div className="hidden sm:flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
           <button
             onClick={() => setViewMode('cards')}
-            className={`p-1.5 rounded-lg text-xs font-medium transition ${
-              viewMode === 'cards' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+            className={`p-1 rounded-md text-[11px] font-medium transition ${
+              viewMode === 'cards' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500'
             }`}
             title="Kart Görünümü"
           >
-            <span className="text-xs font-semibold px-1">Kart</span>
+            <span className="font-semibold px-1">Kart</span>
           </button>
           <button
             onClick={() => setViewMode('compact')}
-            className={`p-1.5 rounded-lg text-xs font-medium transition ${
-              viewMode === 'compact' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+            className={`p-1 rounded-md text-[11px] font-medium transition ${
+              viewMode === 'compact' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500'
             }`}
             title="Kompakt Liste"
           >
-            <span className="text-xs font-semibold px-1">Liste</span>
+            <span className="font-semibold px-1">Liste</span>
           </button>
         </div>
       </div>
 
       {/* Search Input and Advanced Filter Toggle */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <div className="relative flex-1">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-            <Search className="w-4 h-4" />
+          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+            <Search className="w-3.5 h-3.5" />
           </div>
           <input
             type="text"
@@ -199,17 +201,17 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={
               selectedProductType === 'contact_lens'
-                ? 'Kontakt lens adı, marka, dağıtıcı (Lens Medikal, CooperVision, Opsa), BC, kutu ara...'
-                : 'Cam veya lens adı, marka, dağıtıcı (HOYA/Seiko, Beta Optik, Zeiss, Lens Medikal), indeks ara...'
+                ? 'Lens adı, marka, BC, kutu ara...'
+                : 'Cam adı, marka, dağıtıcı, indeks ara...'
             }
-            className="w-full pl-9 pr-9 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 text-sm focus:outline-hidden focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
+            className="w-full pl-8 pr-8 py-1 sm:py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
           />
           {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -217,23 +219,24 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
         {/* Advanced Filter Toggle */}
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${
+          className={`px-2.5 py-1 sm:py-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition ${
             showAdvanced || (sphCheck || cylCheck)
               ? 'bg-sky-50 border-sky-300 text-sky-700'
               : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
           }`}
           title="Gelişmiş Numara ve Sıralama Filtreleri"
         >
-          <SlidersHorizontal className="w-4 h-4" />
-          <span className="hidden sm:inline">Filtreler</span>
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span className="hidden xs:inline">Filtreler</span>
         </button>
       </div>
 
       {/* ÜST DAĞITICI / DİSTRİBÜTÖR FİRMALAR (Lens Medikal, HOYA & Seiko, Beta Optik, Zeiss, Opsa vb.) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 bg-slate-50/70 p-1.5 rounded-xl border border-slate-200/60">
-        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider pl-1 flex items-center gap-1 whitespace-nowrap">
-          <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Dağıtıcı / Üst Firma:</span>
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 bg-slate-50/70 p-1 rounded-lg border border-slate-200/50">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-0.5 flex items-center gap-0.5 whitespace-nowrap">
+          <Building2 className="w-3 h-3 text-indigo-600 shrink-0" />
+          <span className="hidden sm:inline">Dağıtıcı:</span>
+          <span className="inline sm:hidden">Firma:</span>
         </span>
         <button
           onClick={() => {
@@ -242,13 +245,13 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             setSelectedIndex('all');
             setSelectedCategory('all');
           }}
-          className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+          className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
             selectedDistributor === 'all'
               ? 'bg-indigo-900 text-white shadow-xs'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              : 'bg-white text-slate-700 border border-slate-200'
           }`}
         >
-          Tüm Dağıtıcılar
+          Tümü
         </button>
         {availableDistributors.map((dist) => (
           <button
@@ -259,19 +262,19 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
               setSelectedIndex('all');
               setSelectedCategory('all');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 border ${
+            className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition flex items-center gap-1 border ${
               selectedDistributor === dist.name
                 ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                : 'bg-white text-slate-700 border-slate-200/90 hover:bg-indigo-50 hover:text-indigo-900 hover:border-indigo-200'
+                : 'bg-white text-slate-700 border-slate-200/85 hover:bg-indigo-50 hover:text-indigo-900'
             }`}
             title={dist.name}
           >
             <span>{dist.shortName || dist.name}</span>
             <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              className={`text-[9px] px-1 rounded-full font-mono ${
                 selectedDistributor === dist.name
                   ? 'bg-indigo-700 text-white'
-                  : 'bg-slate-100 text-slate-500'
+                  : 'bg-slate-100 text-slate-400'
               }`}
             >
               {dist.count}
@@ -281,11 +284,11 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
       </div>
 
       {/* Brand Chips Carousel */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-1">Marka:</span>
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5 shrink-0">Marka:</span>
         <button
           onClick={() => setSelectedBrand('all')}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+          className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
             selectedBrand === 'all'
               ? 'bg-slate-900 text-white'
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -297,7 +300,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
           <button
             key={brand}
             onClick={() => setSelectedBrand(selectedBrand === brand ? 'all' : brand)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+            className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-semibold whitespace-nowrap transition ${
               selectedBrand === brand
                 ? 'bg-sky-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -309,13 +312,13 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
       </div>
 
       {/* Index and Category Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
         {selectedProductType !== 'contact_lens' && (
           <>
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-1">İndeks:</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5 shrink-0">İndeks:</span>
             <button
               onClick={() => setSelectedIndex('all')}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap transition ${
+              className={`px-1.5 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
                 selectedIndex === 'all'
                   ? 'bg-slate-800 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -327,7 +330,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
               <button
                 key={idx}
                 onClick={() => setSelectedIndex(idx)}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap transition ${
+                className={`px-1.5 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
                   selectedIndex === idx
                     ? 'bg-sky-700 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -337,7 +340,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
               </button>
             ))}
 
-            <span className="text-slate-300 mx-1">|</span>
+            <span className="text-slate-300 mx-0.5 shrink-0">|</span>
           </>
         )}
 
@@ -346,7 +349,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
           <button
             key={cat.id}
             onClick={() => setSelectedCategory(cat.id)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+            className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
               selectedCategory === cat.id
                 ? 'bg-amber-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'

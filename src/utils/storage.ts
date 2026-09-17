@@ -55,25 +55,8 @@ export function loadStoredLenses(): Lens[] {
     const raw = localStorage.getItem(KEYS.LENSES);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Ensure all products are sanitized (correct brand spelling and productType)
+      if (Array.isArray(parsed)) {
         const sanitizedList = parsed.map(sanitizeLens);
-
-        // Ensure all Drive extracted lenses and contact lenses are present in system memory
-        const hasContactLenses = sanitizedList.some(
-          (l: Lens) => l.productType === 'contact_lens' || l.id?.startsWith('cv-') || l.id?.startsWith('opsa-') || l.id?.startsWith('alcon-') || l.id?.startsWith('bl-')
-        );
-        const hasDriveLenses = sanitizedList.some((l: Lens) => l.id?.startsWith('rs-') || l.id?.startsWith('zs-') || l.id?.startsWith('hp-'));
-
-        if (!hasContactLenses || !hasDriveLenses) {
-          // Merge missing initial & drive extracted products into stored state
-          const existingIds = new Set(sanitizedList.map((p: Lens) => p.id));
-          const missing = INITIAL_LENSES.filter((i) => !existingIds.has(i.id)).map(sanitizeLens);
-          const updated = [...sanitizedList, ...missing];
-          saveStoredLenses(updated);
-          return updated;
-        }
-
         saveStoredLenses(sanitizedList);
         return sanitizedList;
       }
@@ -81,7 +64,7 @@ export function loadStoredLenses(): Lens[] {
   } catch (err) {
     console.error('Failed to load lenses from storage:', err);
   }
-  return INITIAL_LENSES.map(sanitizeLens);
+  return [];
 }
 
 export function saveStoredLenses(lenses: Lens[]): void {
@@ -98,14 +81,14 @@ export function loadStoredDiscounts(): BrandDiscount[] {
     const raw = localStorage.getItem(KEYS.DISCOUNTS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (err) {
     console.error('Failed to load discounts from storage:', err);
   }
-  return INITIAL_DISCOUNTS;
+  return [];
 }
 
 export function saveStoredDiscounts(discounts: BrandDiscount[]): void {
@@ -128,33 +111,7 @@ export function loadStoredCustomLists(): CustomList[] {
   } catch (err) {
     console.error('Failed to load custom lists from storage:', err);
   }
-  return [
-    {
-      id: 'default-vitrin-list',
-      name: 'Vitrin & Çok Satanlar',
-      description: 'Mağazada en çok önerdiğimiz popüler cam paketleri',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      items: [
-        {
-          id: 'item-1',
-          lensId: 'essilor-ormix-160-sapphire-hr',
-          lensSnapshot: INITIAL_LENSES[2],
-          quantity: 2,
-          customRetailPrice: 3200,
-          notes: 'Vidalı ve nilör çerçeveler için tavsiye',
-        },
-        {
-          id: 'item-2',
-          lensId: 'zeiss-clearview-160-blueprotect',
-          lensSnapshot: INITIAL_LENSES[9],
-          quantity: 2,
-          customRetailPrice: 3800,
-          notes: 'Masa başı ve bilgisayar kullanıcıları',
-        },
-      ],
-    },
-  ];
+  return [];
 }
 
 export function saveStoredCustomLists(lists: CustomList[]): void {

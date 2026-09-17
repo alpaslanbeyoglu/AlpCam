@@ -78,10 +78,14 @@ export const BrandDiscountsView: React.FC<BrandDiscountsViewProps> = ({
     triggerSaved();
   };
 
+  React.useEffect(() => {
+    setDiscountList(discounts);
+  }, [discounts]);
+
   const handleResetDefaults = () => {
-    if (window.confirm('Tüm marka iskontolarını varsayılan ayarlara sıfırlamak istiyor musunuz?')) {
-      setDiscountList(INITIAL_DISCOUNTS);
-      onSaveDiscounts(INITIAL_DISCOUNTS);
+    if (window.confirm('Tüm marka iskontolarını temizlemek istiyor musunuz?')) {
+      setDiscountList([]);
+      onSaveDiscounts([]);
       triggerSaved();
     }
   };

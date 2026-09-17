@@ -38,7 +38,6 @@ import { LensDetailModal } from './components/LensDetailModal';
 import { BrandDiscountsView } from './components/BrandDiscountsView';
 import { CustomListsView } from './components/CustomListsView';
 import { DriveSyncView } from './components/DriveSyncView';
-import { GithubGuideView } from './components/GithubGuideView';
 import { AddLensModal } from './components/AddLensModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { useExchangeRates } from './hooks/useExchangeRates';
@@ -57,7 +56,7 @@ import {
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<
-    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'github_guide'
+    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync'
   >('catalog');
 
   // Core Data
@@ -260,6 +259,52 @@ export default function App() {
   const handleProductTypeChange = (val: 'all' | 'eyeglass_lens' | 'contact_lens') => {
     setSelectedProductType(val);
     setSelectedDistributor('all');
+    setSelectedBrand('all');
+    setSelectedIndex('all');
+    setSelectedCategory('all');
+  };
+
+  const handleBrandChange = (brand: string) => {
+    setSelectedBrand(brand);
+    if (brand !== 'all') {
+      const match = lenses.find(l => {
+        const sanitized = sanitizeLens(l);
+        return sanitized.brand && sanitized.brand.trim().toLowerCase() === brand.trim().toLowerCase();
+      });
+      if (match) {
+        const sanitized = sanitizeLens(match);
+        if (sanitized.productType === 'contact_lens') {
+          setSelectedProductType('contact_lens');
+        } else {
+          setSelectedProductType('eyeglass_lens');
+        }
+      }
+    } else if (selectedDistributor === 'all') {
+      setSelectedProductType('all');
+    }
+    setSelectedIndex('all');
+    setSelectedCategory('all');
+  };
+
+  const handleDistributorChange = (distributor: string) => {
+    setSelectedDistributor(distributor);
+    if (distributor !== 'all') {
+      const match = lenses.find(l => {
+        const sanitized = sanitizeLens(l);
+        const dist = sanitized.distributor || getDistributorForBrand(sanitized.brand, sanitized.name);
+        return dist && (dist.toLowerCase().includes(distributor.toLowerCase()) || distributor.toLowerCase().includes(dist.toLowerCase()));
+      });
+      if (match) {
+        const sanitized = sanitizeLens(match);
+        if (sanitized.productType === 'contact_lens') {
+          setSelectedProductType('contact_lens');
+        } else {
+          setSelectedProductType('eyeglass_lens');
+        }
+      }
+    } else if (selectedBrand === 'all') {
+      setSelectedProductType('all');
+    }
     setSelectedBrand('all');
     setSelectedIndex('all');
     setSelectedCategory('all');
@@ -477,8 +522,8 @@ export default function App() {
   };
 
   const handleResetCatalog = () => {
-    setLenses(INITIAL_LENSES);
-    showToast('Katalog varsayılan fabrika listesine sıfırlandı');
+    setLenses([]);
+    showToast('Katalogdaki tüm veriler başarıyla temizlendi');
   };
 
   const activeList = customLists[0];
@@ -560,10 +605,10 @@ export default function App() {
             eyeglassCount={eyeglassCount}
             contactLensCount={contactLensCount}
             selectedDistributor={selectedDistributor}
-            setSelectedDistributor={setSelectedDistributor}
+            setSelectedDistributor={handleDistributorChange}
             availableDistributors={availableDistributors}
             selectedBrand={selectedBrand}
-            setSelectedBrand={setSelectedBrand}
+            setSelectedBrand={handleBrandChange}
             availableBrands={availableBrands}
             selectedIndex={selectedIndex}
             setSelectedIndex={setSelectedIndex}
@@ -708,10 +753,6 @@ export default function App() {
           />
         </div>
 
-        {/* TAB 5: GITHUB PAGES GUIDE */}
-        <div className={activeTab === 'github_guide' ? 'block' : 'hidden'}>
-          <GithubGuideView />
-        </div>
       </main>
 
       {/* Footer */}
