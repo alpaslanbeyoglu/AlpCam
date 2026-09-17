@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
-import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers, Eye, Glasses, Package, Building2, Trash2 } from 'lucide-react';
+import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
+import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers, Eye, Glasses, Package, Building2, Trash2, Tag } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 
 interface LensCardProps {
@@ -54,6 +54,7 @@ export const LensCard: React.FC<LensCardProps> = ({
   onDeleteLens,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
+  const campaign = getCampaignDetails(lens, pairCount);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
   React.useEffect(() => {
@@ -71,7 +72,7 @@ export const LensCard: React.FC<LensCardProps> = ({
   };
 
   const isContact = lens.productType === 'contact_lens';
-  const isCampaign = lens.sourceListType === 'kampanya' || lens.notes?.toLowerCase().includes('kampanya') || lens.name.toLowerCase().includes('kampanya');
+  const isCampaign = campaign.isCampaign;
   const distributorName = lens.distributor || getDistributorForBrand(lens.brand, lens.name);
   const distributorInfo = distributorName ? getDistributorInfo(distributorName) : undefined;
 
@@ -86,9 +87,19 @@ export const LensCard: React.FC<LensCardProps> = ({
     >
       {/* Campaign Banner if campaign product */}
       {isCampaign && (
-        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-3 py-1 flex items-center justify-between">
-          <span className="flex items-center gap-1">🔥 Kampanyalı Ürün</span>
-          <span className="bg-black/20 px-1.5 py-0.5 rounded text-[9px]">Kampanya: 01.09.2026 - 31.10.2026</span>
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white text-[10px] sm:text-[11px] font-bold px-3 py-1.5 flex items-center justify-between shadow-xs">
+          <span className="flex items-center gap-1.5 font-extrabold truncate">
+            <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0 animate-pulse" />
+            <span className="truncate">🔥 {campaign.campaignTitle}</span>
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="bg-white/20 backdrop-blur-xs px-1.5 py-0.5 rounded text-[10px] font-black">
+              %{campaign.discountPercent} Avantajlı
+            </span>
+            <span className="hidden sm:inline bg-black/25 px-1.5 py-0.5 rounded text-[9px] font-medium">
+              {campaign.campaignPeriod}
+            </span>
+          </div>
         </div>
       )}
 
@@ -231,23 +242,50 @@ export const LensCard: React.FC<LensCardProps> = ({
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs text-slate-500">
               <span>
-                {isContact
-                  ? pairCount === 2
-                    ? '2 Kutu (Sağ + Sol) Satış:'
-                    : '1 Kutu Tavsiye Satış:'
+                {campaign.isCampaign
+                  ? isContact
+                    ? pairCount === 2 ? '2 Kutu Kampanyalı Satış:' : '1 Kutu Kampanyalı Satış:'
+                    : `Kampanyalı Satış (${pairCount === 2 ? 'Çift Cam' : 'Tek Cam'}):`
+                  : isContact
+                  ? pairCount === 2 ? '2 Kutu (Sağ + Sol) Satış:' : '1 Kutu Tavsiye Satış:'
                   : `Tavsiye Satış (${pairCount === 2 ? 'Çift Cam' : 'Tek Cam'}):`}
               </span>
-              <span className="text-[11px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 py-0.5 rounded">
-                KDV Dahil
-              </span>
+              {campaign.isCampaign ? (
+                <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  <span>%{campaign.discountPercent} İndirim</span>
+                </span>
+              ) : (
+                <span className="text-[11px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 py-0.5 rounded">
+                  KDV Dahil
+                </span>
+              )}
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-slate-900 tracking-tight">
-                {formatCurrency(fin.retailPrice, lens.currency)}
-              </span>
+            <div className="flex items-baseline justify-between gap-2">
+              <div>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className={`text-2xl font-black tracking-tight ${campaign.isCampaign ? 'text-amber-600' : 'text-slate-900'}`}>
+                    {formatCurrency(fin.retailPrice, lens.currency)}
+                  </span>
+                  {campaign.isCampaign && (
+                    <span className="text-sm font-bold text-slate-400 line-through">
+                      {formatCurrency(campaign.regularRetailPrice, lens.currency)}
+                    </span>
+                  )}
+                </div>
+                {campaign.isCampaign && (
+                  <div className="text-[11px] font-semibold text-slate-600 mt-0.5 flex items-center gap-1 flex-wrap">
+                    <span>Normal Liste:</span>
+                    <span className="font-bold text-slate-700">{formatCurrency(campaign.regularRetailPrice, lens.currency)}</span>
+                    <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                      {formatCurrency(campaign.savingsAmount, lens.currency)} Tasarruf
+                    </span>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => onOpenDetails(lens)}
-                className="text-xs text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-0.5"
+                className="text-xs text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-0.5 shrink-0 self-start"
               >
                 <span>Özellikler</span>
                 <Info className="w-3.5 h-3.5" />
@@ -260,27 +298,41 @@ export const LensCard: React.FC<LensCardProps> = ({
             {/* Wholesale Row */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               {/* Toptan & İskonto */}
-              <div className="bg-white p-2 rounded-xl border border-slate-200">
+              <div className={`p-2 rounded-xl border ${campaign.isCampaign ? 'bg-amber-50/50 border-amber-200' : 'bg-white border-slate-200'}`}>
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold uppercase">
                   <span>Toptan Alış</span>
-                  <span className="text-sky-600 font-bold">-%{fin.effectiveDiscountRate}</span>
+                  {campaign.isCampaign ? (
+                    <span className="text-amber-600 font-bold">🔥 Kampanya</span>
+                  ) : (
+                    <span className="text-sky-600 font-bold">-%{fin.effectiveDiscountRate}</span>
+                  )}
                 </div>
                 <div className="mt-0.5 flex flex-col">
-                  <div className="flex items-baseline gap-1">
+                  <div className="flex items-baseline gap-1 flex-wrap">
                     <span className="text-base font-extrabold text-slate-800">
                       {lens.currency === 'EUR'
                         ? `${formatCurrency(lens.wholesalePrice, 'EUR')} (€)`
                         : formatCurrency(fin.netWholesaleCost, lens.currency)}
                     </span>
-                    <span className="text-[11px] text-slate-400 line-through">
-                      {formatCurrency(fin.wholesaleListPrice, lens.currency)}
-                    </span>
+                    {campaign.isCampaign && campaign.regularWholesalePrice ? (
+                      <span className="text-[11px] text-slate-400 line-through" title="Normal Liste Toptan Fiyatı">
+                        {formatCurrency(campaign.regularWholesalePrice, lens.currency)}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 line-through">
+                        {formatCurrency(fin.wholesaleListPrice, lens.currency)}
+                      </span>
+                    )}
                   </div>
-                  {lens.currency === 'EUR' && (
+                  {campaign.isCampaign && campaign.regularWholesalePrice ? (
+                    <span className="text-[9px] text-amber-700 font-semibold">
+                      Normal Toptan: {formatCurrency(campaign.regularWholesalePrice, lens.currency)}
+                    </span>
+                  ) : lens.currency === 'EUR' ? (
                     <span className="text-[10px] text-indigo-600 font-semibold">
                       Canlı Karşılığı: ~ {formatCurrency(fin.netWholesaleCost, 'TRY')}
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">
                   {isContact
@@ -294,19 +346,39 @@ export const LensCard: React.FC<LensCardProps> = ({
               </div>
 
               {/* Perakende & Kar */}
-              <div className="bg-white p-2 rounded-xl border border-slate-200">
+              <div className={`p-2 rounded-xl border ${campaign.isCampaign ? 'bg-amber-50/50 border-amber-200' : 'bg-white border-slate-200'}`}>
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold uppercase">
                   <span>Perakende</span>
-                  <span className="text-emerald-600 font-bold">%{fin.profitMarginPercent} Kar</span>
+                  {campaign.isCampaign ? (
+                    <span className="text-amber-700 bg-amber-100 px-1 py-0.2 rounded font-bold">
+                      %{campaign.discountPercent} İndirimli
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 font-bold">%{fin.profitMarginPercent} Kar</span>
+                  )}
                 </div>
-                <div className="mt-0.5 flex items-baseline gap-1.5">
-                  <span className="text-base font-extrabold text-emerald-700">
+                <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+                  <span className={`text-base font-extrabold ${campaign.isCampaign ? 'text-amber-600' : 'text-emerald-700'}`}>
                     {formatCurrency(fin.retailPrice, lens.currency)}
                   </span>
+                  {campaign.isCampaign && (
+                    <span className="text-[11px] text-slate-400 line-through">
+                      {formatCurrency(campaign.regularRetailPrice, lens.currency)}
+                    </span>
+                  )}
                 </div>
-                <div className="text-[10px] text-emerald-600 font-medium mt-0.5">
-                  + {formatCurrency(fin.profitAmount, lens.currency)} Net Kar
-                </div>
+                {campaign.isCampaign ? (
+                  <div className="text-[10px] text-slate-600 font-medium mt-0.5">
+                    Normal: <span className="font-bold text-slate-800">{formatCurrency(campaign.regularRetailPrice, lens.currency)}</span>
+                    <span className="text-emerald-600 font-bold ml-1">
+                      (+{formatCurrency(fin.profitAmount, lens.currency)} Kar)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                    + {formatCurrency(fin.profitAmount, lens.currency)} Net Kar
+                  </div>
+                )}
               </div>
             </div>
           </div>

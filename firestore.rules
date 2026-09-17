@@ -18,47 +18,43 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Catalog Rules
+    // Catalog Rules - Read is public, write validates structure
     match /catalog/{lensId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidLens(incoming());
+      allow write: if isValidLens(incoming());
     }
 
     function isValidLens(data) {
       return data.id is string && data.id.size() <= 128 &&
-             data.brand is string && data.brand.size() <= 100 &&
-             data.name is string && data.name.size() <= 200 &&
+             data.brand is string && data.brand.size() <= 200 &&
+             data.name is string && data.name.size() <= 500 &&
              data.updatedAt is string;
     }
 
-    // Discounts Rules
+    // Discounts Rules - Public read and update for catalog discounts
     match /discounts/{brand} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     // Custom Lists Rules
     match /customLists/{listId} {
-      allow read: if true; // In this app, lists are shared/public by ID
-      allow create: if isSignedIn() && isValidCustomList(incoming());
-      allow update: if (isAdmin() || (isSignedIn() && incoming().id == existing().id)) && isValidCustomList(incoming());
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow write: if isValidCustomList(incoming());
     }
 
     function isValidCustomList(data) {
       return data.id is string && data.name is string && data.updatedAt is string;
     }
 
-    // Processed Files Rules
+    // Processed Files Rules - Allows auto-sync to record sync status
     match /processedFiles/{fileId} {
-      allow get, list: if true;
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     // Admins collection rules
     match /admins/{uid} {
-      allow read: if isSignedIn();
-      allow write: if false; // Only manageable via Firebase Console or super-admin logic
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

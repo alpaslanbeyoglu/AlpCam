@@ -36,34 +36,38 @@ export function useAutoDriveSync(
         return;
       }
 
-      // 4. Process new files in small batches (e.g., 3 at a time) for speed
-      const batchSize = 3;
-      for (let i = 0; i < newFiles.length; i += batchSize) {
-        const batchFiles = newFiles.slice(i, i + batchSize);
+      // 4. Process new files sequentially (1 at a time) to prevent network drops, timeouts, and API rate limit collisions
+      for (let i = 0; i < newFiles.length; i++) {
+        const file = newFiles[i];
         if (onStatusChange) {
-          onStatusChange(true, `Arka plan tarama (${i + 1}-${Math.min(i + batchSize, newFiles.length)}/${newFiles.length})`);
+          onStatusChange(true, `Arka plan taranıyor (${i + 1}/${newFiles.length}): ${file.name}`);
         }
 
-        await Promise.all(batchFiles.map(async (file) => {
+        try {
           const res = await scanSingleDriveFile(file, {
             priceMode: 'auto',
             profitMarkup: 2.0,
             productTypeHint: 'auto'
           });
 
-          if (res.success && res.lenses) {
-            // Save lenses to Firestore
-            const lensPromises = res.lenses.map(l => 
-              setDoc(doc(db, 'catalog', l.id), {
-                ...l,
-                sourceFileId: file.id,
-                sourceFileName: file.name,
-                updatedAt: new Date().toISOString()
-              })
-            );
-            await Promise.all(lensPromises);
+          if (res.success && res.lenses && res.lenses.length > 0) {
+            // Save lenses to Firestore in chunks of 20 to avoid overwhelming write limits
+            const chunkSize = 20;
+            for (let c = 0; c < res.lenses.length; c += chunkSize) {
+              const chunk = res.lenses.slice(c, c + chunkSize);
+              await Promise.all(
+                chunk.map(l => 
+                  setDoc(doc(db, 'catalog', l.id), {
+                    ...l,
+                    sourceFileId: file.id,
+                    sourceFileName: file.name,
+                    updatedAt: new Date().toISOString()
+                  })
+                )
+              );
+            }
 
-            // Mark file as processed
+            // Mark file as successfully processed in Firestore
             await setDoc(doc(db, 'processedFiles', file.id), {
               fileId: file.id,
               fileName: file.name,
@@ -72,15 +76,32 @@ export function useAutoDriveSync(
               extractedCount: res.lenses.length
             });
           } else {
+            // Mark file as error/skipped so it doesn't repeatedly block future syncs
             await setDoc(doc(db, 'processedFiles', file.id), {
               fileId: file.id,
               fileName: file.name,
               lastScanTime: new Date().toISOString(),
               status: 'error',
-              message: res.error || 'Tarama hatası'
+              message: res.error || 'Ürün listesi okunamadı'
             });
           }
-        }));
+        } catch (fileErr: any) {
+          console.error(`Auto sync error for file ${file.name}:`, fileErr);
+          try {
+            await setDoc(doc(db, 'processedFiles', file.id), {
+              fileId: file.id,
+              fileName: file.name,
+              lastScanTime: new Date().toISOString(),
+              status: 'error',
+              message: fileErr?.message || 'İşlem hatası'
+            });
+          } catch (_) {}
+        }
+
+        // Brief cooldown between files to respect API rate limits
+        if (i < newFiles.length - 1) {
+          await new Promise(r => setTimeout(r, 1500));
+        }
       }
     } catch (err) {
       console.error('Auto sync error:', err);

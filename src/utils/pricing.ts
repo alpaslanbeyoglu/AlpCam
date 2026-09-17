@@ -302,3 +302,94 @@ export function formatCurrency(amount: number, currency: string = 'TRY'): string
   if (currency === 'EUR') return `€${formatted}`;
   return `₺${formatted}`;
 }
+
+export interface LensCampaignDetails {
+  isCampaign: boolean;
+  campaignTitle: string;
+  campaignPeriod: string;
+  regularRetailPrice: number;
+  regularWholesalePrice?: number;
+  discountPercent: number;
+  savingsAmount: number;
+  hasExplicitRegularPrice: boolean;
+}
+
+/**
+ * Kampanyalı ürünün kampanya bilgisi, normal listedeki fiyatı ve indirim avantajını hesaplar
+ */
+export function getCampaignDetails(lens: Lens, pairCount: 1 | 2 = 1): LensCampaignDetails {
+  const isCampaign = Boolean(
+    lens.isCampaign ||
+    lens.sourceListType === 'kampanya' ||
+    lens.notes?.toLowerCase().includes('kampanya') ||
+    lens.name.toLowerCase().includes('kampanya') ||
+    lens.sourceFileName?.toLowerCase().includes('kampanya') ||
+    lens.campaignInfo ||
+    lens.regularPrice
+  );
+
+  if (!isCampaign) {
+    return {
+      isCampaign: false,
+      campaignTitle: '',
+      campaignPeriod: '',
+      regularRetailPrice: 0,
+      discountPercent: 0,
+      savingsAmount: 0,
+      hasExplicitRegularPrice: false,
+    };
+  }
+
+  // Kampanya başlığı
+  let campaignTitle = lens.campaignInfo || '';
+  if (!campaignTitle) {
+    if (lens.sourceFileName?.toLowerCase().includes('yaz') || lens.notes?.toLowerCase().includes('yaz')) {
+      campaignTitle = '2026 Yaz Kampanyası';
+    } else if (lens.notes?.toLowerCase().includes('kampanya')) {
+      const match = lens.notes.match(/([^.-]*kampanya[^.-]*)/i);
+      campaignTitle = match ? match[0].trim() : 'Özel Kampanya';
+    } else if (lens.name.toLowerCase().includes('kampanya')) {
+      campaignTitle = 'Özel Kampanyalı Fiyat';
+    } else {
+      campaignTitle = 'Özel Fiyat Kampanyası';
+    }
+  }
+
+  // Kampanya geçerlilik süresi
+  const campaignPeriod = lens.campaignValidity || '01.06.2026 - 31.10.2026';
+
+  // Normal perakende liste fiyatı
+  const hasExplicitRegularPrice = Boolean(lens.regularPrice && lens.regularPrice > lens.retailPrice);
+  let baseRegularRetail = lens.regularPrice || 0;
+  if (!baseRegularRetail || baseRegularRetail <= lens.retailPrice) {
+    baseRegularRetail = Math.round((lens.retailPrice * 1.35) / 10) * 10;
+  }
+
+  // Normal toptan liste fiyatı
+  let baseRegularWholesale = lens.regularWholesalePrice || 0;
+  if (!baseRegularWholesale || baseRegularWholesale <= lens.wholesalePrice) {
+    if (lens.wholesalePrice > 0) {
+      baseRegularWholesale = Math.round((lens.wholesalePrice * 1.35) / 10) * 10;
+    }
+  }
+
+  const multiplier = lens.productType === 'contact_lens' ? 1 : pairCount;
+  const regularRetailPrice = baseRegularRetail * multiplier;
+  const currentRetailPrice = (lens.retailPrice || 0) * multiplier;
+  const savingsAmount = Math.max(0, regularRetailPrice - currentRetailPrice);
+  const discountPercent = regularRetailPrice > 0 
+    ? Math.round((savingsAmount / regularRetailPrice) * 100) 
+    : 0;
+
+  return {
+    isCampaign: true,
+    campaignTitle,
+    campaignPeriod,
+    regularRetailPrice,
+    regularWholesalePrice: baseRegularWholesale ? baseRegularWholesale * multiplier : undefined,
+    discountPercent,
+    savingsAmount,
+    hasExplicitRegularPrice,
+  };
+}
+

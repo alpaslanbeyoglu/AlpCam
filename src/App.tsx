@@ -726,7 +726,7 @@ export default function App() {
           />
 
           {/* Results Grid / List */}
-          <div className="max-w-7xl mx-auto p-3 sm:p-4">
+          <div className="max-w-7xl mx-auto p-3 sm:p-4 pb-28 sm:pb-24">
             {filteredLenses.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3 mt-4">
                 <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">

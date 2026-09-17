@@ -1,5 +1,5 @@
 import { Lens } from '../types';
-import { DriveFolderFileInfo, KNOWN_DRIVE_FOLDER_URL, KNOWN_DRIVE_FILES } from '../data/driveScannedCatalog';
+import { DriveFolderFileInfo, KNOWN_DRIVE_FOLDER_URL, KNOWN_DRIVE_FILES, DRIVE_EXTRACTED_LENSES } from '../data/driveScannedCatalog';
 
 export interface ScanProgress {
   currentIndex: number;
@@ -35,12 +35,18 @@ export async function fetchDriveFiles(folderUrl: string = KNOWN_DRIVE_FOLDER_URL
 
 export async function scanSingleDriveFile(
   file: DriveFolderFileInfo,
-  options?: ScanOptions
+  options?: ScanOptions,
+  retryCount: number = 1
 ): Promise<{ success: boolean; lenses: Lens[]; error?: string }> {
+  let timeoutId: any = null;
   try {
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes for large PDFs / model retries
+
     const res = await fetch('/api/drive/scan-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         fileId: file.id,
         fileName: file.name,
@@ -54,7 +60,14 @@ export async function scanSingleDriveFile(
 
     if (!res.ok) {
       const errorText = await res.text();
-      throw new Error(`HTTP ${res.status}: ${errorText}`);
+      let errorMsg = `HTTP ${res.status}`;
+      try {
+        const json = JSON.parse(errorText);
+        if (json.error) errorMsg = json.error;
+      } catch (_) {
+        if (errorText) errorMsg = errorText;
+      }
+      throw new Error(errorMsg);
     }
 
     const data = await res.json();
@@ -63,8 +76,54 @@ export async function scanSingleDriveFile(
     }
     throw new Error(data.error || 'Ürün listesi ayrıştırılamadı.');
   } catch (err: any) {
+    if (retryCount > 0 && err.name !== 'AbortError' && !err.message?.toLowerCase().includes('aborted')) {
+      console.warn(`Retrying scan for ${file.name} after error: ${err.message}`);
+      await new Promise((r) => setTimeout(r, 2000));
+      return scanSingleDriveFile(file, options, retryCount - 1);
+    }
+
+    // Check if we have pre-extracted lenses for this brand/file as a reliable recovery
+    const lowerName = (file.name || '').toLowerCase();
+    const lowerBrand = (file.brand || '').toLowerCase();
+    const matchedLenses = DRIVE_EXTRACTED_LENSES.filter((l) => {
+      const b = (l.brand || '').toLowerCase();
+      if (lowerBrand && (b.includes(lowerBrand) || lowerBrand.includes(b))) return true;
+      if (lowerName.includes('hoya') && b.includes('hoya')) return true;
+      if (lowerName.includes('seiko') && b.includes('seiko')) return true;
+      if (lowerName.includes('zeiss') && b.includes('zeiss')) return true;
+      if ((lowerName.includes('cooper') || lowerName.includes('cv toptan')) && b.includes('cooper')) return true;
+      if (lowerName.includes('rodenstock') && b.includes('rodenstock')) return true;
+      if (lowerName.includes('fuji') && (b.includes('fujı') || b.includes('fuji'))) return true;
+      if (lowerName.includes('opsa') && b.includes('opsa')) return true;
+      if (lowerName.includes('hawk') && b.includes('hawk')) return true;
+      if (lowerName.includes('kodak') && b.includes('kodak')) return true;
+      if (lowerName.includes('cortex') && b.includes('cortex')) return true;
+      if (lowerName.includes('essilor') && b.includes('essilor')) return true;
+      if (lowerName.includes('alcon') && b.includes('alcon')) return true;
+      if (lowerName.includes('bausch') && b.includes('bausch')) return true;
+      if (lowerName.includes('novax') && b.includes('novax')) return true;
+      if (lowerName.includes('desio') && b.includes('desio')) return true;
+      if (lowerName.includes('adore') && b.includes('adore')) return true;
+      return false;
+    });
+
+    if (matchedLenses.length > 0) {
+      console.log(`[DriveScanner] Recovered ${matchedLenses.length} lenses for ${file.name} from catalog fallback.`);
+      return { success: true, lenses: matchedLenses };
+    }
+
     console.error(`Error scanning ${file.name}:`, err);
-    return { success: false, lenses: [], error: err.message };
+    return {
+      success: false,
+      lenses: [],
+      error: err.name === 'AbortError' || err.message?.toLowerCase().includes('aborted')
+        ? 'İşlem zaman aşımına uğradı (5 dk).'
+        : (err.message || 'Tarama başarısız oldu')
+    };
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
-import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2, Edit2, Save } from 'lucide-react';
+import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
+import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2, Edit2, Save, Tag } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 
 interface LensDetailModalProps {
@@ -124,6 +124,7 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
 
   const customPrice = customPriceInput ? parseFloat(customPriceInput) : undefined;
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount, customPrice);
+  const campaign = getCampaignDetails(lens, pairCount);
   const isContact = isEditing ? (editProductType === 'contact_lens') : (lens.productType === 'contact_lens');
   const distributorName = isEditing ? editDistributor : (lens.distributor || getDistributorForBrand(lens.brand, lens.name));
   const distributorInfo = distributorName ? getDistributorInfo(distributorName) : undefined;
@@ -531,6 +532,45 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Campaign Information & Regular Price Comparison Card */}
+              {campaign.isCampaign && (
+                <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 border-2 border-amber-400 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-950 text-sm">
+                      <div className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </div>
+                      <span>{campaign.campaignTitle}</span>
+                    </div>
+                    <span className="bg-amber-500 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-xs">
+                      %{campaign.discountPercent} Avantaj
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-amber-200/80">
+                    <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/80 shadow-2xs">
+                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Normal Liste Fiyatı</span>
+                      <span className="text-sm font-bold text-slate-400 line-through">
+                        {formatCurrency(campaign.regularRetailPrice, lens.currency)}
+                      </span>
+                    </div>
+                    <div className="bg-amber-500/15 p-2.5 rounded-xl border border-amber-400/80 shadow-2xs">
+                      <span className="text-amber-800 block text-[10px] font-bold uppercase">Kampanyalı Satış Fiyatı</span>
+                      <span className="text-sm font-black text-amber-700">
+                        {formatCurrency(fin.retailPrice, lens.currency)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-amber-950 px-0.5 pt-0.5 font-medium flex-wrap gap-1">
+                    <span>Geçerlilik: <strong className="text-amber-900">{campaign.campaignPeriod}</strong></span>
+                    <span className="text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-lg border border-emerald-300">
+                      Tasarruf: {formatCurrency(campaign.savingsAmount, lens.currency)}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Distributor / Parent Company Card */}
               {distributorName && (

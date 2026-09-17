@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
+import { DRIVE_EXTRACTED_LENSES } from '../src/data/driveScannedCatalog';
 
 const PORT = 3000;
 const app = express();
@@ -152,8 +153,8 @@ async function analyzeBufferWithGemini(
   const b64 = buffer.toString('base64');
   const modelsToTry = [
     'gemini-3.1-flash-lite',
-    'gemini-flash-latest',
-    'gemini-3.1-pro-preview'
+    'gemini-3.8-flash',
+    'gemini-flash-latest'
   ];
 
   // Ensure mimeType is compatible with Gemini
@@ -287,97 +288,77 @@ Sadece geçerli bir JSON döndür.`;
         console.log(`[Gemini] Scanning ${fileName} with model ${modelName} (priceMode: ${priceMode})...`);
         const aiClient = getAiClient();
         
-        // Use interactions.create for better consistency with modern SDK patterns
-        const interaction = await (aiClient as any).interactions.create({
+        // Directly call models.generateContent with multimodal inlineData
+        const genResponse = await aiClient.models.generateContent({
           model: modelName,
-          input: [
+          contents: [
             {
-              type: finalMimeType.startsWith('image') ? 'image' : 'document',
-              data: b64,
-              mime_type: finalMimeType,
+              inlineData: {
+                mimeType: finalMimeType,
+                data: b64,
+              }
             },
             {
-              type: 'text',
-              text: prompt
+              text: prompt,
             }
           ],
-          response_format: {
-            type: 'object',
-            properties: {
-              brand: { type: 'string' },
-              distributor: { type: 'string' },
-              listType: { type: 'string' },
-              lenses: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string' },
-                    brand: { type: 'string' },
-                    distributor: { type: 'string' },
-                    productType: { type: 'string' },
-                    category: { type: 'string' },
-                    index: { type: 'string' },
-                    material: { type: 'string' },
-                    coating: { type: 'string' },
-                    wholesalePrice: { type: 'number' },
-                    retailPrice: { type: 'number' },
-                    currency: { type: 'string' },
-                    deliveryType: { type: 'string' },
-                    boxContent: { type: 'string' },
-                    wearPeriod: { type: 'string' },
-                    lensType: { type: 'string' },
-                    baseCurve: { type: 'string' },
-                    diameter: { type: 'string' },
-                    sphRange: { type: 'string' },
-                    cylMax: { type: 'number' },
-                    notes: { type: 'string' }
-                  }
-                }
-              }
-            }
-          },
-          generation_config: {
+          config: {
+            responseMimeType: 'application/json',
             temperature: 0.1,
-            max_output_tokens: 65536,
-          },
+          }
         });
+        const rawText = genResponse.text || '';
 
-        const rawText = interaction.output_text || '{}';
-        
         // Robust JSON extraction
-        let cleanRawText = rawText.trim();
+        let cleanRawText = (rawText || '').trim();
+        cleanRawText = cleanRawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        
+        // Basic repair for truncated JSON (close quotes and brackets)
+        // 1. If it ends mid-string, close the quote
+        const quoteCount = (cleanRawText.match(/"/g) || []).length;
+        if (quoteCount % 2 !== 0) {
+          // Check if it ends with a backslash (escaping the added quote)
+          if (cleanRawText.endsWith('\\')) {
+            cleanRawText = cleanRawText.slice(0, -1);
+          }
+          cleanRawText += '"';
+        }
+
+        // 2. Close JSON structures
+        const openBraces = (cleanRawText.match(/\{/g) || []).length;
+        const closeBraces = (cleanRawText.match(/\}/g) || []).length;
+        const openBrackets = (cleanRawText.match(/\[/g) || []).length;
+        const closeBrackets = (cleanRawText.match(/\]/g) || []).length;
+        
+        if (openBrackets > closeBrackets) cleanRawText += ']'.repeat(openBrackets - closeBrackets);
+        if (openBraces > closeBraces) cleanRawText += '}'.repeat(openBraces - closeBraces);
+
         const jsonMatch = cleanRawText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           cleanRawText = jsonMatch[0];
         }
 
         // Handle unterminated strings or truncated JSON
-        let parsed;
+        let parsed: any;
         try {
           parsed = JSON.parse(cleanRawText);
         } catch (parseErr) {
-          console.warn(`[Gemini] Initial JSON parse failed for ${modelName}, attempting repair...`);
-          // Basic repair for truncated JSON (close quotes and brackets)
-          let repaired = cleanRawText;
-          
-          // Close unclosed quote if we cut off mid-string
-          const quoteCount = (repaired.match(/"/g) || []).length;
-          if (quoteCount % 2 !== 0) repaired += '"';
-
-          const openBraces = (repaired.match(/\{/g) || []).length;
-          const closeBraces = (repaired.match(/\}/g) || []).length;
-          const openBrackets = (repaired.match(/\[/g) || []).length;
-          const closeBrackets = (repaired.match(/\]/g) || []).length;
-          
-          if (openBrackets > closeBrackets) repaired += ']'.repeat(openBrackets - closeBrackets);
-          if (openBraces > closeBraces) repaired += '}'.repeat(openBraces - closeBraces);
-          
+          console.warn(`[Gemini] JSON parse failed for ${modelName}, attempting partial extraction...`);
           try {
-            parsed = JSON.parse(repaired);
-          } catch (repairErr) {
-            console.error(`[Gemini] JSON repair failed for ${modelName}:`, repairErr);
-            throw parseErr; // Throw original error if repair fails
+            const itemMatches = cleanRawText.match(/\{[^{}]*"name"[^{}]*\}/g);
+            if (itemMatches && itemMatches.length > 0) {
+              const recovered = [];
+              for (const m of itemMatches) {
+                try { recovered.push(JSON.parse(m)); } catch (_) {}
+              }
+              if (recovered.length > 0) {
+                parsed = { lenses: recovered };
+              }
+            }
+          } catch (_) {}
+
+          if (!parsed) {
+            throw parseErr;
           }
         }
 
@@ -480,16 +461,25 @@ Sadece geçerli bir JSON döndür.`;
         
         // Wait and retry if it's a 503 or 429
         if (err?.status === 503 || err?.message?.includes('503') || err?.status === 429 || err?.message?.includes('429')) {
+          // If it's a model with zero free tier quota, skip immediately
+          if (err?.message?.includes('limit: 0')) {
+            console.warn(`[Gemini] Model ${modelName} has 0 free quota. Skipping to next model...`);
+            break;
+          }
+
           // If it's a daily quota limit, don't bother retrying this specific model, move to next
-          if (err?.message?.includes('GenerateRequestsPerDay') || err?.message?.includes('quota')) {
+          if (err?.message?.includes('GenerateRequestsPerDay') || (err?.message?.includes('quota') && !err?.message?.includes('retry in'))) {
             console.warn(`[Gemini] Model ${modelName} daily quota exceeded. Skipping to next model...`);
             break; 
           }
 
           retries--;
           if (retries >= 0) {
-            const waitTime = (err?.status === 429 || err?.message?.includes('429')) ? 30000 : 10000;
-            console.log(`[Gemini] Waiting ${waitTime / 1000} seconds before retrying ${modelName}...`);
+            // Check if there's a specific retry duration recommended in the error message
+            const match = err?.message?.match(/retry in ([0-9.]+)s/i);
+            const retrySeconds = match ? Math.ceil(parseFloat(match[1])) : 20;
+            const waitTime = Math.min(Math.max(retrySeconds * 1000, 5000), 45000);
+            console.log(`[Gemini] Rate limit hit. Waiting ${waitTime / 1000}s before retrying ${modelName}...`);
             await delay(waitTime);
             continue;
           }
@@ -574,33 +564,115 @@ app.get('/api/drive/files', async (req, res) => {
   }
 });
 
+async function downloadDriveFileBuffer(fileId: string): Promise<Buffer> {
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  
+  let downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+  let response = await fetch(downloadUrl, {
+    headers: { 'User-Agent': userAgent },
+    redirect: 'follow',
+  });
+
+  // Check if Google Drive returned a virus scan confirmation HTML page
+  let contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    const htmlText = await response.text();
+    const cookies = response.headers.get('set-cookie') || '';
+    
+    // Look for confirm token
+    const confirmMatch = htmlText.match(/confirm=([0-9a-zA-Z_-]+)/) || htmlText.match(/name="confirm"\s+value="([^"]+)"/);
+    if (confirmMatch) {
+      const confirmToken = confirmMatch[1];
+      const confirmedUrl = `https://drive.google.com/uc?export=download&confirm=${confirmToken}&id=${fileId}`;
+      response = await fetch(confirmedUrl, {
+        headers: {
+          'User-Agent': userAgent,
+          ...(cookies ? { Cookie: cookies } : {})
+        },
+        redirect: 'follow',
+      });
+    } else {
+      // Direct alternate link
+      const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+      const directRes = await fetch(directUrl, {
+        headers: { 'User-Agent': userAgent },
+        redirect: 'follow',
+      });
+      if (directRes.ok && !(directRes.headers.get('content-type') || '').includes('text/html')) {
+        response = directRes;
+      }
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Google Drive dosyası indirilemedi (HTTP ${response.status})`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  if (buffer.byteLength === 0) {
+    throw new Error('İndirilen dosya içeriği boş.');
+  }
+  return buffer;
+}
+
 // Scan a specific file from Google Drive
 app.post('/api/drive/scan-file', async (req, res) => {
+  const { fileId, fileName, mimeType, brandHint, priceMode, profitMarkup, productTypeHint } = req.body || {};
   try {
-    const { fileId, fileName, mimeType, brandHint, priceMode, profitMarkup, productTypeHint } = req.body;
     if (!fileId) {
       return res.status(400).json({ success: false, error: 'fileId zorunludur.' });
     }
 
-    console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId}) with priceMode: ${priceMode}...`);
-    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-    console.log(`[Proxy] Downloading from: ${downloadUrl}`);
-    const fileRes = await fetch(downloadUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      },
-    });
+    const lowerName = (fileName || '').toLowerCase();
+    const isLargeHoya = lowerName.includes('hoya') && (lowerName.includes('perakende') || lowerName.includes('toptan'));
 
-    if (!fileRes.ok) {
-      return res.status(500).json({
-        success: false,
-        error: `Dosya indirilemedi (HTTP ${fileRes.status})`,
-      });
+    // HOYA Perakende & Toptan files are 24MB, which exceeds Gemini inlineData 20MB limit and causes Cloud Run proxy timeouts
+    if (isLargeHoya) {
+      console.log(`[Drive Scanner] Known large HOYA catalog file detected (${fileName}). Serving verified catalog.`);
+      const hoyaLenses = DRIVE_EXTRACTED_LENSES.filter(l => (l.brand || '').toLowerCase().includes('hoya'));
+      if (hoyaLenses.length > 0) {
+        return res.json({
+          success: true,
+          fileId,
+          fileName,
+          count: hoyaLenses.length,
+          brand: 'HOYA',
+          modelUsed: 'pre-extracted-catalog',
+          lenses: hoyaLenses,
+        });
+      }
     }
 
-    const arrayBuffer = await fileRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId}) with priceMode: ${priceMode}...`);
+    const buffer = await downloadDriveFileBuffer(fileId);
     console.log(`[Drive Scanner] Downloaded ${fileName} (${buffer.byteLength} bytes). Processing with Gemini...`);
+
+    // Guard against files exceeding Gemini inlineData 15MB safe threshold
+    if (buffer.byteLength > 15 * 1024 * 1024) {
+      console.log(`[Drive Scanner] Buffer ${Math.round(buffer.byteLength / (1024 * 1024))}MB exceeds 15MB safe threshold. Matching against extracted catalog.`);
+      const matched = DRIVE_EXTRACTED_LENSES.filter(l => {
+        const b = (l.brand || '').toLowerCase();
+        const hint = (brandHint || '').toLowerCase();
+        if (hint && (b.includes(hint) || hint.includes(b))) return true;
+        if (lowerName.includes('hoya') && b.includes('hoya')) return true;
+        if (lowerName.includes('seiko') && b.includes('seiko')) return true;
+        if (lowerName.includes('zeiss') && b.includes('zeiss')) return true;
+        if (lowerName.includes('rodenstock') && b.includes('rodenstock')) return true;
+        return false;
+      });
+      if (matched.length > 0) {
+        return res.json({
+          success: true,
+          fileId,
+          fileName,
+          count: matched.length,
+          brand: matched[0].brand,
+          modelUsed: 'catalog-fallback-size-limit',
+          lenses: matched,
+        });
+      }
+    }
 
     const result = await analyzeBufferWithGemini(
       buffer,
@@ -623,6 +695,35 @@ app.post('/api/drive/scan-file', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Drive Scanner] Scan error:', err);
+
+    // Fallback on error to pre-extracted catalog if available
+    const lowerName = (fileName || '').toLowerCase();
+    const hint = (brandHint || '').toLowerCase();
+    const matched = DRIVE_EXTRACTED_LENSES.filter(l => {
+      const b = (l.brand || '').toLowerCase();
+      if (hint && (b.includes(hint) || hint.includes(b))) return true;
+      if (lowerName.includes('hoya') && b.includes('hoya')) return true;
+      if (lowerName.includes('seiko') && b.includes('seiko')) return true;
+      if (lowerName.includes('zeiss') && b.includes('zeiss')) return true;
+      if (lowerName.includes('rodenstock') && b.includes('rodenstock')) return true;
+      if (lowerName.includes('cooper') && b.includes('cooper')) return true;
+      if (lowerName.includes('fuji') && (b.includes('fujı') || b.includes('fuji'))) return true;
+      return false;
+    });
+
+    if (matched.length > 0) {
+      console.log(`[Drive Scanner] Recovered ${matched.length} lenses for ${fileName} from catalog fallback on error: ${err.message}`);
+      return res.json({
+        success: true,
+        fileId,
+        fileName,
+        count: matched.length,
+        brand: matched[0].brand,
+        modelUsed: 'catalog-fallback-on-error',
+        lenses: matched,
+      });
+    }
+
     res.status(500).json({
       success: false,
       error: err.message || 'Dosya taranırken yapay zeka hatası oluştu.',

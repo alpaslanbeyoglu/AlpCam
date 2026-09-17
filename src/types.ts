@@ -39,6 +39,11 @@ export interface Lens {
   sourceFileId?: string;    // Geldiği Drive dosya ID'si
   sourceFileName?: string;  // Geldiği PDF/Katalog dosya adı
   sourceListType?: 'perakende' | 'toptan' | 'kampanya' | 'genel'; // Liste tipi (PFL, TFL, Kampanya)
+  isCampaign?: boolean;     // Kampanyalı ürün mü
+  campaignInfo?: string;    // Kampanya bilgisi/adı (örn: '2026 Yaz Kampanyası')
+  campaignValidity?: string;// Kampanya geçerlilik tarihi (örn: '01.06.2026 - 31.10.2026')
+  regularPrice?: number;    // O camın normal listedeki perakende fiyatı
+  regularWholesalePrice?: number; // O camın normal listedeki toptan alış fiyatı
   updatedAt?: string;
 }
 

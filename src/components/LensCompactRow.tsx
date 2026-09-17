@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lens, BrandDiscount } from '../types';
-import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { Plus, Check, Info, Eye, Glasses, Trash2 } from 'lucide-react';
+import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
+import { Plus, Check, Info, Eye, Glasses, Trash2, Sparkles } from 'lucide-react';
 
 interface LensCompactRowProps {
   lens: Lens;
@@ -27,6 +27,7 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
   onDeleteLens,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
+  const campaign = getCampaignDetails(lens, pairCount);
   const isContact = lens.productType === 'contact_lens';
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
@@ -40,7 +41,9 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
   return (
     <div
       id={`lens-row-${lens.id}`}
-      className="bg-white border-b border-slate-100 hover:bg-sky-50/40 p-3 sm:px-4 flex items-center justify-between gap-3 transition"
+      className={`border-b border-slate-100 p-3 sm:px-4 flex items-center justify-between gap-3 transition ${
+        campaign.isCampaign ? 'bg-amber-50/20 hover:bg-amber-50/50' : 'bg-white hover:bg-sky-50/40'
+      }`}
     >
       {/* Brand, Index & Name */}
       <div className="flex-1 min-w-0" onClick={() => onOpenDetails(lens)}>
@@ -63,7 +66,15 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
               {lens.wearPeriod}
             </span>
           )}
-          {lens.sourceListType && (
+          {campaign.isCampaign ? (
+            <span
+              className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-500 text-white flex items-center gap-0.5 shadow-xs"
+              title={`${campaign.campaignTitle} (${campaign.campaignPeriod})`}
+            >
+              <Sparkles className="w-2.5 h-2.5" />
+              <span>KMP -%{campaign.discountPercent}</span>
+            </span>
+          ) : lens.sourceListType ? (
             <span
               className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
                 lens.sourceListType === 'toptan'
@@ -75,7 +86,7 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
             >
               {lens.sourceListType === 'toptan' ? 'TFL' : lens.sourceListType === 'perakende' ? 'PFL' : 'KMP'}
             </span>
-          )}
+          ) : null}
           <span className="text-xs font-semibold text-slate-900 truncate">
             {lens.name}
           </span>
@@ -84,6 +95,11 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
           {isContact
             ? `${lens.boxContent || '6 Adet Kutu'} ${lens.baseCurve ? `• BC: ${lens.baseCurve}` : ''} ${lens.diameter ? `• DIA: ${lens.diameter}` : ''}`
             : `${lens.coating} • ${lens.sphRange || 'Tüm diyoptriler'}`}
+          {campaign.isCampaign && (
+            <span className="text-amber-700 font-semibold ml-1.5">
+              • {campaign.campaignTitle}
+            </span>
+          )}
         </div>
       </div>
 
@@ -93,10 +109,15 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
         {!isCustomerMode && (
           <div className="hidden xs:block">
             <div className="text-[10px] text-slate-400 font-semibold uppercase">
-              Net Alış (-%{fin.effectiveDiscountRate})
+              {campaign.isCampaign ? 'Kampanya Alış' : `Net Alış (-%${fin.effectiveDiscountRate})`}
             </div>
-            <div className="text-xs font-bold text-slate-800">
-              {formatCurrency(fin.netWholesaleCost, lens.currency)}
+            <div className="text-xs font-bold text-slate-800 flex items-baseline gap-1 justify-end">
+              <span>{formatCurrency(fin.netWholesaleCost, lens.currency)}</span>
+              {campaign.isCampaign && campaign.regularWholesalePrice && (
+                <span className="text-[10px] text-slate-400 line-through">
+                  {formatCurrency(campaign.regularWholesalePrice, lens.currency)}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -104,10 +125,19 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
         {/* Retail Price (Always visible) */}
         <div>
           <div className="text-[10px] text-slate-400 font-semibold uppercase">
-            {isCustomerMode ? 'Satış Fiyatı' : 'Perakende (Kar: %' + fin.profitMarginPercent + ')'}
+            {isCustomerMode
+              ? campaign.isCampaign ? 'Kampanyalı Satış' : 'Satış Fiyatı'
+              : campaign.isCampaign ? `Perakende (-%${campaign.discountPercent})` : `Perakende (Kar: %${fin.profitMarginPercent})`}
           </div>
-          <div className="text-sm font-extrabold text-emerald-700">
-            {formatCurrency(fin.retailPrice, lens.currency)}
+          <div className="text-sm font-extrabold flex items-baseline gap-1.5 justify-end">
+            <span className={campaign.isCampaign ? 'text-amber-600' : 'text-emerald-700'}>
+              {formatCurrency(fin.retailPrice, lens.currency)}
+            </span>
+            {campaign.isCampaign && (
+              <span className="text-xs font-semibold text-slate-400 line-through">
+                {formatCurrency(campaign.regularRetailPrice, lens.currency)}
+              </span>
+            )}
           </div>
         </div>
 
