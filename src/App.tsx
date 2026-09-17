@@ -26,7 +26,7 @@ import {
   saveIsAdminSession,
 } from './utils/storage';
 import { fetchFromDriveUrl, parseExcelOrCsvData } from './utils/driveSync';
-import { sanitizeLens, setGlobalExchangeRates } from './utils/pricing';
+import { sanitizeLens, setGlobalExchangeRates, isCampaignLens } from './utils/pricing';
 import { getDistributorForBrand, getDistributorInfo } from './data/distributors';
 
 // Components
@@ -98,6 +98,7 @@ export default function App() {
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
+  const [catalogSection, setCatalogSection] = useState<'regular' | 'campaign'>('regular');
   const [selectedProductType, setSelectedProductType] = useState<'all' | 'eyeglass_lens' | 'contact_lens'>('all');
   const [selectedDistributor, setSelectedDistributor] = useState('all');
   const [selectedBrand, setSelectedBrand] = useState('all');
@@ -383,13 +384,26 @@ export default function App() {
     () => lenses.filter((l) => sanitizeLens(l).productType === 'contact_lens').length,
     [lenses]
   );
+  const regularCount = useMemo(
+    () => lenses.filter((l) => !isCampaignLens(l)).length,
+    [lenses]
+  );
+  const campaignCount = useMemo(
+    () => lenses.filter((l) => isCampaignLens(l)).length,
+    [lenses]
+  );
 
   // Fast filter & search algorithm
   const filteredLenses = useMemo(() => {
     return lenses
       .map(sanitizeLens)
       .filter((lens) => {
-        // 0. Product Type (eyeglass_lens vs contact_lens)
+        // 0. Catalog Section (Regular vs Campaign)
+        const isCamp = isCampaignLens(lens);
+        if (catalogSection === 'regular' && isCamp) return false;
+        if (catalogSection === 'campaign' && !isCamp) return false;
+
+        // 0.5 Product Type (eyeglass_lens vs contact_lens)
         if (selectedProductType === 'eyeglass_lens' && lens.productType === 'contact_lens') {
           return false;
         }
@@ -400,7 +414,7 @@ export default function App() {
         // 1. Text Search (multi-term search)
         if (searchTerm.trim()) {
           const queryTerms = searchTerm.toLowerCase().trim().split(/\s+/);
-          const targetString = `${lens.brand} ${lens.name} ${lens.index || ''} ${lens.coating || ''} ${lens.material || ''} ${lens.notes || ''} ${lens.wearPeriod || ''} ${lens.baseCurve || ''} ${lens.diameter || ''} ${lens.boxContent || ''}`.toLowerCase();
+          const targetString = `${lens.brand} ${lens.name} ${lens.productCode || ''} ${lens.costCode || ''} ${lens.index || ''} ${lens.coating || ''} ${lens.material || ''} ${lens.notes || ''} ${lens.wearPeriod || ''} ${lens.baseCurve || ''} ${lens.diameter || ''} ${lens.boxContent || ''}`.toLowerCase();
           const matchesAllTerms = queryTerms.every((term) => targetString.includes(term));
           if (!matchesAllTerms) return false;
         }
@@ -690,6 +704,10 @@ export default function App() {
           <LensSearchBar
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
+            catalogSection={catalogSection}
+            setCatalogSection={setCatalogSection}
+            regularCount={regularCount}
+            campaignCount={campaignCount}
             selectedProductType={selectedProductType}
             setSelectedProductType={handleProductTypeChange}
             eyeglassCount={eyeglassCount}
@@ -755,6 +773,7 @@ export default function App() {
                     brandDiscounts={brandDiscounts}
                     pairCount={pairCount}
                     isCustomerMode={isCustomerMode}
+                    catalog={lenses}
                     onOpenDetails={(l) => setDetailLens(l)}
                     onAddToList={(l) => handleAddToList(l)}
                     isAddedToActiveList={isLensInActiveList(lens.id)}
@@ -774,6 +793,7 @@ export default function App() {
                       brandDiscounts={brandDiscounts}
                       pairCount={pairCount}
                       isCustomerMode={isCustomerMode}
+                      catalog={lenses}
                       onOpenDetails={(l) => setDetailLens(l)}
                       onAddToList={(l) => handleAddToList(l)}
                       isAddedToActiveList={isLensInActiveList(lens.id)}
@@ -881,6 +901,7 @@ export default function App() {
           pairCount={pairCount}
           isCustomerMode={isCustomerMode}
           customLists={customLists}
+          catalog={lenses}
           onAddToList={(lens, listId, customPrice) => {
             handleAddToList(lens, listId, customPrice);
           }}

@@ -1,5 +1,6 @@
 import { Lens, BrandDiscount, LensFinancials } from '../types';
 import { getDistributorForBrand } from '../data/distributors';
+import { getLensCostWithCodeParser } from './costCodeParser';
 
 // Global exchange rates memory
 let globalExchangeRates = { EUR: 40.0, USD: 36.0, loaded: false };
@@ -67,26 +68,45 @@ export function calculateLensFinancials(
   let singleWholesaleList = Number(lens.wholesalePrice) || 0;
   const singleRetail = customRetailPrice !== undefined ? Number(customRetailPrice) : Number(lens.retailPrice) || 0;
 
-  // Perakende listelerden gelen ürünlerde toptan liste fiyatı belirtilmemişse,
-  // liste (perakende) fiyatı üzerinden marka iskontosu uygulanarak net alış hesaplanır.
-  if (singleWholesaleList === 0 && singleRetail > 0) {
+  // Koddan maliyet tespiti (J&J Acuvue formatı veya Optik Gizli Maliyet Kodu SO077L vb.)
+  const codeCostData = getLensCostWithCodeParser(lens);
+  const isCostFromCode = codeCostData.isDerivedFromCode && !!codeCostData.parsedResult?.parsedCost;
+
+  if (isCostFromCode && codeCostData.parsedResult?.parsedCost) {
+    // Eğer toptan fiyat belirtilmemişse veya koddan daha hassas maliyet gelmişse
+    if (singleWholesaleList === 0 || singleWholesaleList === singleRetail) {
+      singleWholesaleList = codeCostData.parsedResult.parsedCost;
+    }
+  } else if (singleWholesaleList === 0 && singleRetail > 0) {
+    // Perakende listelerden gelen ürünlerde toptan liste fiyatı belirtilmemişse,
+    // liste (perakende) fiyatı üzerinden marka iskontosu uygulanarak net alış hesaplanır.
     singleWholesaleList = singleRetail;
   }
 
-  const wholesaleListPrice = singleWholesaleList * multiplier;
-  const netWholesaleCost = wholesaleListPrice * (1 - rate / 100);
-  const retailPrice = singleRetail * multiplier;
-  const profitAmount = retailPrice - netWholesaleCost;
+  const wholesaleListPrice = Number((singleWholesaleList * multiplier).toFixed(2));
+  // Eğer ürünün maliyeti doğrudan koddan net olarak çıkarılmışsa ve marka iskontosu 0 ise direkt net maliyet odur.
+  // Marka iskontosu girilmişse (örn: optisyenin ek özel anlaşması) o da uygulanabilir.
+  const netWholesaleCost = Number((wholesaleListPrice * (1 - rate / 100)).toFixed(2));
+  const retailPrice = Number((singleRetail * multiplier).toFixed(2));
+  const profitAmount = Number((retailPrice - netWholesaleCost).toFixed(2));
   const profitMarginPercent = retailPrice > 0 ? (profitAmount / retailPrice) * 100 : 0;
 
   return {
-    wholesaleListPrice: Math.round(wholesaleListPrice),
+    wholesaleListPrice,
     effectiveDiscountRate: rate,
-    netWholesaleCost: Math.round(netWholesaleCost),
-    retailPrice: Math.round(retailPrice),
-    profitAmount: Math.round(profitAmount),
+    netWholesaleCost,
+    retailPrice,
+    profitAmount,
     profitMarginPercent: Number(profitMarginPercent.toFixed(1)),
     pairCount: (isContact ? 1 : pairCount) as 1 | 2,
+    isCostFromCode,
+    codeCostResult: isCostFromCode && codeCostData.parsedResult?.parsedCost
+      ? {
+          rawCode: codeCostData.parsedResult.rawCode,
+          parsedCost: codeCostData.parsedResult.parsedCost * multiplier,
+          patternDescription: codeCostData.parsedResult.patternDescription,
+        }
+      : undefined,
   };
 }
 
@@ -293,11 +313,15 @@ export function sanitizeLens(lens: Lens): Lens {
 }
 
 /**
- * Türkçe Para Formatı (₺)
+ * Türkçe Para Formatı (₺) - Kuruşlu tutarlar için (örn: 1.337,50 ₺) hassas basamak desteği
  */
 export function formatCurrency(amount: number, currency: string = 'TRY'): string {
-  const val = Math.round(Number(amount) || 0);
-  const formatted = val.toLocaleString('tr-TR');
+  const num = Number(amount) || 0;
+  const hasDecimals = Math.abs(num - Math.round(num)) > 0.001;
+  const formatted = num.toLocaleString('tr-TR', {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
   if (currency === 'USD') return `$${formatted}`;
   if (currency === 'EUR') return `€${formatted}`;
   return `₺${formatted}`;
@@ -312,21 +336,170 @@ export interface LensCampaignDetails {
   discountPercent: number;
   savingsAmount: number;
   hasExplicitRegularPrice: boolean;
+  matchedRegularLens?: Lens | null;
+  matchedRegularName?: string;
+  matchedSource: 'catalog_match' | 'explicit' | 'estimated';
+  wholesaleSavingsAmount?: number;
+  wholesaleDiscountPercent?: number;
 }
 
 /**
- * Kampanyalı ürünün kampanya bilgisi, normal listedeki fiyatı ve indirim avantajını hesaplar
+ * Verilen ürünün kampanyalı olup olmadığını tespit eder
  */
-export function getCampaignDetails(lens: Lens, pairCount: 1 | 2 = 1): LensCampaignDetails {
-  const isCampaign = Boolean(
+export function isCampaignLens(lens: Lens): boolean {
+  return Boolean(
     lens.isCampaign ||
     lens.sourceListType === 'kampanya' ||
     lens.notes?.toLowerCase().includes('kampanya') ||
     lens.name.toLowerCase().includes('kampanya') ||
     lens.sourceFileName?.toLowerCase().includes('kampanya') ||
-    lens.campaignInfo ||
-    lens.regularPrice
+    lens.campaignInfo
   );
+}
+
+/**
+ * İsmi tokenize edip karşılaştırma için temizler (stop-words ve kampanya ibarelerini eler)
+ */
+function cleanTokensForMatching(text: string): string[] {
+  if (!text) return [];
+  const stopWords = new Set([
+    'kampanya', 'kampanyasi', 'kampanyası', 'yaz', 'kış', 'kis', 'bahar',
+    'özel', 'ozel', 'stok', 'stock', 'fırsat', 'firsat', '2025', '2026', '2024',
+    'kmp', 'fiyat', 'fiyatı', 'fiyati', 've', 'ile', 'cam', 'camı', 'cami', 'lens',
+    'adet', 'kutu', 'katalog', 'liste', 'listesi', 'pfl', 'tfl'
+  ]);
+
+  return text
+    .toLowerCase()
+    .replace(/[®™©()[\],.\-+/]/g, ' ')
+    .split(/\s+/)
+    .map(t => t.trim())
+    .filter(t => t.length >= 2 && !stopWords.has(t));
+}
+
+/**
+ * Kampanyalı ürün için, ait olduğu markanın normal listesindeki (PFL / standart katalog)
+ * karşılığı olan ürünü bulur ve normal liste fiyatlarını oradan çeker.
+ */
+export function findMatchingRegularLens(
+  campaignLens: Lens,
+  catalog: Lens[] = []
+): { matchedLens: Lens | null; score: number } {
+  if (!catalog || catalog.length === 0) {
+    return { matchedLens: null, score: 0 };
+  }
+
+  const brandNormalized = campaignLens.brand.trim().toLowerCase();
+  const productType = campaignLens.productType || 'eyeglass_lens';
+  const campaignTokens = new Set(cleanTokensForMatching(campaignLens.name));
+  const campaignCoatingTokens = new Set(cleanTokensForMatching(campaignLens.coating || ''));
+
+  // Sadece aynı markaya ait, kampanya OLMAYAN normal liste ürünlerini filtrele
+  const candidates = catalog.filter((item) => {
+    if (item.id === campaignLens.id) return false;
+    if (item.brand.trim().toLowerCase() !== brandNormalized) return false;
+    if (isCampaignLens(item)) return false;
+    if ((item.productType || 'eyeglass_lens') !== productType) return false;
+    return true;
+  });
+
+  if (candidates.length === 0) {
+    return { matchedLens: null, score: 0 };
+  }
+
+  let bestCandidate: Lens | null = null;
+  let highestScore = 0;
+
+  for (const cand of candidates) {
+    let score = 0;
+
+    // 1. İndeks Eşleşmesi (Temel kriter)
+    if (campaignLens.index && cand.index) {
+      if (campaignLens.index === cand.index) {
+        score += 50;
+      } else {
+        // İndeksler farklı ise aynı cam olamaz
+        continue;
+      }
+    }
+
+    // 2. Kategori Eşleşmesi (Tek Odaklı, Progresif vb.)
+    if (campaignLens.category && cand.category) {
+      if (campaignLens.category === cand.category) {
+        score += 25;
+      } else if (
+        (campaignLens.category === 'photochromic' && cand.category === 'single_vision') ||
+        (campaignLens.category === 'single_vision' && cand.category === 'photochromic')
+      ) {
+        score -= 10;
+      } else {
+        score -= 40;
+      }
+    }
+
+    // 3. İsim ve Model Eşleşmesi
+    const candTokens = cleanTokensForMatching(cand.name);
+    for (const token of candTokens) {
+      if (campaignTokens.has(token)) {
+        if (['perfalit', 'cosmolit', 'hilux', 'hoyalux', 'balansis', 'lifestyle', 'myself', 'sync', 'colormatic', 'miyosmart', 'as'].includes(token)) {
+          score += 35;
+        } else {
+          score += 15;
+        }
+      }
+    }
+
+    // 4. Kaplama Eşleşmesi
+    if (cand.coating && campaignLens.coating) {
+      const candCoatingTokens = cleanTokensForMatching(cand.coating);
+      let sharedCoating = 0;
+      for (const cToken of candCoatingTokens) {
+        if (campaignCoatingTokens.has(cToken)) {
+          sharedCoating++;
+        }
+      }
+      if (sharedCoating > 0) {
+        score += sharedCoating * 15;
+      }
+      if (cand.coating.toLowerCase().trim() === campaignLens.coating.toLowerCase().trim()) {
+        score += 25;
+      }
+    }
+
+    // 5. Perakende (PFL) listesi önceliği
+    if (cand.sourceListType === 'perakende') {
+      score += 15;
+    }
+
+    // 6. Teslim Tipi (Stok / RX)
+    if (cand.deliveryType === campaignLens.deliveryType) {
+      score += 10;
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestCandidate = cand;
+    }
+  }
+
+  // Eşik puan (en az indeks + model adı örtüşmeli)
+  if (bestCandidate && highestScore >= 50) {
+    return { matchedLens: bestCandidate, score: highestScore };
+  }
+
+  return { matchedLens: null, score: 0 };
+}
+
+/**
+ * Kampanyalı ürünün kampanya bilgisi, normal listedeki fiyatı ve indirim avantajını hesaplar.
+ * Markanın normal listesindeki ürünleri tarayarak gerçek liste fiyatını oradan çeker.
+ */
+export function getCampaignDetails(
+  lens: Lens,
+  pairCount: 1 | 2 = 1,
+  catalog: Lens[] = []
+): LensCampaignDetails {
+  const isCampaign = isCampaignLens(lens);
 
   if (!isCampaign) {
     return {
@@ -337,6 +510,7 @@ export function getCampaignDetails(lens: Lens, pairCount: 1 | 2 = 1): LensCampai
       discountPercent: 0,
       savingsAmount: 0,
       hasExplicitRegularPrice: false,
+      matchedSource: 'estimated',
     };
   }
 
@@ -344,33 +518,56 @@ export function getCampaignDetails(lens: Lens, pairCount: 1 | 2 = 1): LensCampai
   let campaignTitle = lens.campaignInfo || '';
   if (!campaignTitle) {
     if (lens.sourceFileName?.toLowerCase().includes('yaz') || lens.notes?.toLowerCase().includes('yaz')) {
-      campaignTitle = '2026 Yaz Kampanyası';
+      campaignTitle = `${lens.brand} 2026 Yaz Kampanyası`;
     } else if (lens.notes?.toLowerCase().includes('kampanya')) {
       const match = lens.notes.match(/([^.-]*kampanya[^.-]*)/i);
-      campaignTitle = match ? match[0].trim() : 'Özel Kampanya';
+      campaignTitle = match ? match[0].trim() : `${lens.brand} Özel Kampanya`;
     } else if (lens.name.toLowerCase().includes('kampanya')) {
-      campaignTitle = 'Özel Kampanyalı Fiyat';
+      campaignTitle = `${lens.brand} Özel Kampanyası`;
     } else {
-      campaignTitle = 'Özel Fiyat Kampanyası';
+      campaignTitle = `${lens.brand} Fiyat Kampanyası`;
     }
   }
 
   // Kampanya geçerlilik süresi
   const campaignPeriod = lens.campaignValidity || '01.06.2026 - 31.10.2026';
 
-  // Normal perakende liste fiyatı
-  const hasExplicitRegularPrice = Boolean(lens.regularPrice && lens.regularPrice > lens.retailPrice);
-  let baseRegularRetail = lens.regularPrice || 0;
-  if (!baseRegularRetail || baseRegularRetail <= lens.retailPrice) {
-    baseRegularRetail = Math.round((lens.retailPrice * 1.35) / 10) * 10;
-  }
+  // 1. Markanın Normal Listesinden Eşleşen Ürünü ve Fiyatı Bul
+  const { matchedLens } = findMatchingRegularLens(lens, catalog);
 
-  // Normal toptan liste fiyatı
-  let baseRegularWholesale = lens.regularWholesalePrice || 0;
-  if (!baseRegularWholesale || baseRegularWholesale <= lens.wholesalePrice) {
+  let baseRegularRetail = 0;
+  let baseRegularWholesale = 0;
+  let matchedSource: 'catalog_match' | 'explicit' | 'estimated' = 'estimated';
+  let hasExplicitRegularPrice = false;
+
+  if (matchedLens && matchedLens.retailPrice > 0) {
+    // Normal listeden çekilen perakende ve toptan liste fiyatları
+    baseRegularRetail = matchedLens.retailPrice;
+    if (matchedLens.wholesalePrice > 0) {
+      baseRegularWholesale = matchedLens.wholesalePrice;
+    }
+    matchedSource = 'catalog_match';
+    hasExplicitRegularPrice = true;
+  } else if (lens.regularPrice && lens.regularPrice > lens.retailPrice) {
+    // Üründe tanımlı açık normal liste fiyatı
+    baseRegularRetail = lens.regularPrice;
+    if (lens.regularWholesalePrice && lens.regularWholesalePrice > 0) {
+      baseRegularWholesale = lens.regularWholesalePrice;
+    }
+    matchedSource = 'explicit';
+    hasExplicitRegularPrice = true;
+  } else {
+    // Tahmini standart katalog çarpanı
+    baseRegularRetail = Math.round((lens.retailPrice * 1.35) / 10) * 10;
     if (lens.wholesalePrice > 0) {
       baseRegularWholesale = Math.round((lens.wholesalePrice * 1.35) / 10) * 10;
     }
+    matchedSource = 'estimated';
+  }
+
+  // Toptan normal fiyat bulunamadıysa ama perakende varsa ve wholesalePrice varsa
+  if (!baseRegularWholesale && lens.wholesalePrice > 0) {
+    baseRegularWholesale = Math.round((lens.wholesalePrice * 1.35) / 10) * 10;
   }
 
   const multiplier = lens.productType === 'contact_lens' ? 1 : pairCount;
@@ -381,15 +578,32 @@ export function getCampaignDetails(lens: Lens, pairCount: 1 | 2 = 1): LensCampai
     ? Math.round((savingsAmount / regularRetailPrice) * 100) 
     : 0;
 
+  let wholesaleSavingsAmount: number | undefined;
+  let wholesaleDiscountPercent: number | undefined;
+  const regularWholesalePrice = baseRegularWholesale ? baseRegularWholesale * multiplier : undefined;
+
+  if (regularWholesalePrice && lens.wholesalePrice > 0) {
+    const currentWholesale = lens.wholesalePrice * multiplier;
+    wholesaleSavingsAmount = Math.max(0, regularWholesalePrice - currentWholesale);
+    wholesaleDiscountPercent = regularWholesalePrice > 0
+      ? Math.round((wholesaleSavingsAmount / regularWholesalePrice) * 100)
+      : 0;
+  }
+
   return {
     isCampaign: true,
     campaignTitle,
     campaignPeriod,
     regularRetailPrice,
-    regularWholesalePrice: baseRegularWholesale ? baseRegularWholesale * multiplier : undefined,
+    regularWholesalePrice,
     discountPercent,
     savingsAmount,
     hasExplicitRegularPrice,
+    matchedRegularLens: matchedLens || null,
+    matchedRegularName: matchedLens ? matchedLens.name : undefined,
+    matchedSource,
+    wholesaleSavingsAmount,
+    wholesaleDiscountPercent,
   };
 }
 

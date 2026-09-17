@@ -5,6 +5,10 @@ import { LensCategory, ProductType } from '../types';
 interface LensSearchBarProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
+  catalogSection: 'regular' | 'campaign';
+  setCatalogSection: (section: 'regular' | 'campaign') => void;
+  regularCount: number;
+  campaignCount: number;
   selectedProductType: 'all' | 'eyeglass_lens' | 'contact_lens';
   setSelectedProductType: (val: 'all' | 'eyeglass_lens' | 'contact_lens') => void;
   eyeglassCount: number;
@@ -62,6 +66,10 @@ const CONTACT_LENS_CATEGORIES: { id: string; label: string }[] = [
 export const LensSearchBar: React.FC<LensSearchBarProps> = ({
   searchTerm,
   setSearchTerm,
+  catalogSection,
+  setCatalogSection,
+  regularCount,
+  campaignCount,
   selectedProductType,
   setSelectedProductType,
   eyeglassCount,
@@ -128,93 +136,41 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
     selectedProductType === 'contact_lens' ? CONTACT_LENS_CATEGORIES : EYEGLASS_CATEGORIES;
 
   return (
-    <div className="bg-white border-b border-slate-200 px-2 sm:px-4 py-2 sm:py-3 space-y-1.5 sm:space-y-2.5">
-      {/* Top Product Type Separation Tabs (Cam vs Kontakt Lens) */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200/80">
-          <button
-            onClick={() => setSelectedProductType('all')}
-            className={`px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-xs font-bold transition flex items-center gap-1 ${
-              selectedProductType === 'all'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <span>Tümü</span>
-            <span className="px-1 py-0.2 rounded-full bg-slate-200/80 text-[9px] text-slate-700">
-              {eyeglassCount + contactLensCount}
-            </span>
-          </button>
+    <div className="bg-white border-b border-slate-200 px-2 sm:px-4 py-2 sm:py-3 space-y-2">
+      {/* 1. Catalog Section Toggle (Standart Liste vs Kampanyalı Ürünler) */}
+      <div className="flex items-center gap-2 bg-slate-100/90 p-1 rounded-xl border border-slate-200">
+        <button
+          onClick={() => setCatalogSection('regular')}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            catalogSection === 'regular'
+              ? 'bg-white text-slate-900 shadow-sm border border-slate-200/60'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Glasses className="w-3.5 h-3.5 text-blue-600" />
+          <span>Standart Fiyat Listesi</span>
+          <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+            {regularCount}
+          </span>
+        </button>
 
-          <button
-            onClick={() => setSelectedProductType('eyeglass_lens')}
-            className={`px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-xs font-bold transition flex items-center gap-1 ${
-              selectedProductType === 'eyeglass_lens'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-blue-700'
-            }`}
-          >
-            <Glasses className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span className="hidden xs:inline">Gözlük Camları</span>
-            <span className="inline xs:hidden">Camlar</span>
-            <span
-              className={`px-1 py-0.2 rounded-full text-[9px] ${
-                selectedProductType === 'eyeglass_lens'
-                  ? 'bg-blue-700 text-white'
-                  : 'bg-slate-200/80 text-slate-700'
-              }`}
-            >
-              {eyeglassCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setSelectedProductType('contact_lens')}
-            className={`px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-xs font-bold transition flex items-center gap-1 ${
-              selectedProductType === 'contact_lens'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-teal-700'
-            }`}
-          >
-            <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span className="hidden xs:inline">Kontakt Lensler</span>
-            <span className="inline xs:hidden">Lensler</span>
-            <span
-              className={`px-1 py-0.2 rounded-full text-[9px] ${
-                selectedProductType === 'contact_lens'
-                  ? 'bg-teal-700 text-white'
-                  : 'bg-slate-200/80 text-slate-700'
-              }`}
-            >
-              {contactLensCount}
-            </span>
-          </button>
-        </div>
-
-        {/* View Mode (Cards vs Compact Table) */}
-        <div className="hidden sm:flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-          <button
-            onClick={() => setViewMode('cards')}
-            className={`p-1 rounded-md text-[11px] font-medium transition ${
-              viewMode === 'cards' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500'
-            }`}
-            title="Kart Görünümü"
-          >
-            <span className="font-semibold px-1">Kart</span>
-          </button>
-          <button
-            onClick={() => setViewMode('compact')}
-            className={`p-1 rounded-md text-[11px] font-medium transition ${
-              viewMode === 'compact' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-500'
-            }`}
-            title="Kompakt Liste"
-          >
-            <span className="font-semibold px-1">Liste</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setCatalogSection('campaign')}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            catalogSection === 'campaign'
+              ? 'bg-amber-500 text-slate-950 shadow-sm'
+              : 'text-slate-600 hover:text-amber-700 bg-amber-50/50'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+          <span>Kampanyalı Ürünler & Fırsatlar</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${catalogSection === 'campaign' ? 'bg-slate-950 text-amber-300' : 'bg-amber-100 text-amber-800'}`}>
+            {campaignCount}
+          </span>
+        </button>
       </div>
 
-      {/* Search Input and Advanced Filter Toggle */}
+      {/* 2. Search Input & Product Type & View Mode */}
       <div className="flex items-center gap-1.5">
         <div className="relative flex-1">
           <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
@@ -227,9 +183,9 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             placeholder={
               selectedProductType === 'contact_lens'
                 ? 'Lens adı, marka, BC, kutu ara...'
-                : 'Cam adı, marka, dağıtıcı, indeks ara...'
+                : 'Cam adı, marka, dağıtıcı, ürün kodu ara...'
             }
-            className="w-full pl-8 pr-8 py-1 sm:py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
+            className="w-full pl-8 pr-8 py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
           />
           {searchTerm && (
             <button
@@ -255,107 +211,196 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
                 }
               }
             }}
-            className="px-2.5 py-1 sm:py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center gap-1 transition shadow-2xs"
+            className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center gap-1 transition shadow-2xs shrink-0"
             title="Katalog fiyatlarına toplu zam uygula"
           >
             <span>📈 Toplu Zam</span>
           </button>
         )}
 
-        {/* Advanced Filter Toggle */}
+        {/* Filter Toggle Button */}
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className={`px-2.5 py-1 sm:py-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition ${
-            showAdvanced || (sphCheck || cylCheck)
+          className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition shrink-0 ${
+            showAdvanced || hasActiveFilters
               ? 'bg-sky-50 border-sky-300 text-sky-700'
               : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
           }`}
-          title="Gelişmiş Numara ve Sıralama Filtreleri"
+          title="Filtreler ve Dağıtıcı Firmalar"
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span className="hidden xs:inline">Filtreler</span>
+          <span>Filtreler</span>
+          {hasActiveFilters && (
+            <span className="w-2 h-2 rounded-full bg-sky-600 animate-pulse"></span>
+          )}
         </button>
       </div>
 
-      {/* ÜST DAĞITICI / DİSTRİBÜTÖR FİRMALAR (Lens Medikal, HOYA & Seiko, Beta Optik, Zeiss, Opsa vb.) */}
-      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 bg-slate-50/70 p-1 rounded-lg border border-slate-200/50">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-0.5 flex items-center gap-0.5 whitespace-nowrap">
-          <Building2 className="w-3 h-3 text-indigo-600 shrink-0" />
-          <span className="hidden sm:inline">Dağıtıcı:</span>
-          <span className="inline sm:hidden">Firma:</span>
-        </span>
-        <button
-          onClick={() => {
-            setSelectedDistributor('all');
-            setSelectedBrand('all');
-            setSelectedIndex('all');
-            setSelectedCategory('all');
-          }}
-          className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
-            selectedDistributor === 'all'
-              ? 'bg-indigo-900 text-white shadow-xs'
-              : 'bg-white text-slate-700 border border-slate-200'
-          }`}
-        >
-          Tümü
-        </button>
-        {availableDistributors.map((dist) => (
+      {/* 3. Product Type Tabs (Tümü, Gözlük Camları, Kontakt Lensler) */}
+      <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5">
+        <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200/80 shrink-0">
           <button
-            key={dist.name}
-            onClick={() => {
-              setSelectedDistributor(selectedDistributor === dist.name ? 'all' : dist.name);
-              setSelectedBrand('all');
-              setSelectedIndex('all');
-              setSelectedCategory('all');
-            }}
-            className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition flex items-center gap-1 border ${
-              selectedDistributor === dist.name
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                : 'bg-white text-slate-700 border-slate-200/85 hover:bg-indigo-50 hover:text-indigo-900'
+            onClick={() => setSelectedProductType('all')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+              selectedProductType === 'all'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
-            title={dist.name}
           >
-            <span>{dist.shortName || dist.name}</span>
-            <span
-              className={`text-[9px] px-1 rounded-full font-mono ${
-                selectedDistributor === dist.name
-                  ? 'bg-indigo-700 text-white'
-                  : 'bg-slate-100 text-slate-400'
-              }`}
-            >
-              {dist.count}
+            <span>Tümü</span>
+            <span className="px-1 py-0.2 rounded-full bg-slate-200/80 text-[9px] text-slate-700">
+              {eyeglassCount + contactLensCount}
             </span>
           </button>
-        ))}
-      </div>
 
-      {/* Brand Chips Carousel */}
-      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5 shrink-0">Marka:</span>
-        <button
-          onClick={() => setSelectedBrand('all')}
-          className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
-            selectedBrand === 'all'
-              ? 'bg-slate-900 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Tümü
-        </button>
-        {availableBrands.map((brand) => (
           <button
-            key={brand}
-            onClick={() => setSelectedBrand(selectedBrand === brand ? 'all' : brand)}
-            className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-semibold whitespace-nowrap transition ${
-              selectedBrand === brand
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            onClick={() => setSelectedProductType('eyeglass_lens')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+              selectedProductType === 'eyeglass_lens'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-blue-700'
             }`}
           >
-            {brand}
+            <Glasses className="w-3.5 h-3.5 shrink-0" />
+            <span>Gözlük Camları</span>
+            <span className={`px-1 py-0.2 rounded-full text-[9px] ${selectedProductType === 'eyeglass_lens' ? 'bg-blue-700 text-white' : 'bg-slate-200/80 text-slate-700'}`}>
+              {eyeglassCount}
+            </span>
           </button>
-        ))}
+
+          <button
+            onClick={() => setSelectedProductType('contact_lens')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+              selectedProductType === 'contact_lens'
+                ? 'bg-teal-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-teal-700'
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5 shrink-0" />
+            <span>Kontakt Lensler</span>
+            <span className={`px-1 py-0.2 rounded-full text-[9px] ${selectedProductType === 'contact_lens' ? 'bg-teal-700 text-white' : 'bg-slate-200/80 text-slate-700'}`}>
+              {contactLensCount}
+            </span>
+          </button>
+        </div>
+
+        {/* View Mode (Cards vs Compact Table) */}
+        <div className="hidden sm:flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
+          <button
+            onClick={() => setViewMode('cards')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+              viewMode === 'cards' ? 'bg-white text-sky-700 shadow-xs font-bold' : 'text-slate-500'
+            }`}
+          >
+            Kart
+          </button>
+          <button
+            onClick={() => setViewMode('compact')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+              viewMode === 'compact' ? 'bg-white text-sky-700 shadow-xs font-bold' : 'text-slate-500'
+            }`}
+          >
+            Liste
+          </button>
+        </div>
       </div>
+
+      {/* 4. Collapsible Advanced Filters & Distributors Panel (Non-Complex First Page) */}
+      {showAdvanced && (
+        <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 space-y-3 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5 text-sky-600" />
+              <span>Gelişmiş Filtreler ve Dağıtıcı Firmalar</span>
+            </span>
+            {hasActiveFilters && (
+              <button
+                onClick={onResetFilters}
+                className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1"
+              >
+                <span>Filtreleri Sıfırla</span>
+              </button>
+            )}
+          </div>
+
+          {/* Dağıtıcı / Firma Seçimi */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+              <Building2 className="w-3 h-3 text-indigo-600" />
+              <span>Dağıtıcı / Üst Firma:</span>
+            </span>
+            <div className="flex flex-wrap gap-1">
+              <button
+                onClick={() => {
+                  setSelectedDistributor('all');
+                  setSelectedBrand('all');
+                  setSelectedIndex('all');
+                  setSelectedCategory('all');
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                  selectedDistributor === 'all'
+                    ? 'bg-indigo-900 text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-indigo-50'
+                }`}
+              >
+                Tüm Firmalar
+              </button>
+              {availableDistributors.map((dist) => (
+                <button
+                  key={dist.name}
+                  onClick={() => {
+                    setSelectedDistributor(selectedDistributor === dist.name ? 'all' : dist.name);
+                    setSelectedBrand('all');
+                    setSelectedIndex('all');
+                    setSelectedCategory('all');
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${
+                    selectedDistributor === dist.name
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50'
+                  }`}
+                  title={dist.name}
+                >
+                  <span>{dist.shortName || dist.name}</span>
+                  <span className={`text-[10px] px-1.5 rounded-full font-mono ${selectedDistributor === dist.name ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {dist.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Marka Seçimi */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Marka:</span>
+            <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+              <button
+                onClick={() => setSelectedBrand('all')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                  selectedBrand === 'all'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Tüm Markalar
+              </button>
+              {availableBrands.map((brand) => (
+                <button
+                  key={brand}
+                  onClick={() => setSelectedBrand(selectedBrand === brand ? 'all' : brand)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                    selectedBrand === brand
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {brand}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Index and Category Chips */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">

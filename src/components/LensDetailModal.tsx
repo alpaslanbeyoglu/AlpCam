@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
-import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2, Edit2, Save, Tag } from 'lucide-react';
+import { parseCostFromCode } from '../utils/costCodeParser';
+import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2, Edit2, Save, Tag, Barcode } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 
 interface LensDetailModalProps {
@@ -11,6 +12,7 @@ interface LensDetailModalProps {
   pairCount: 1 | 2;
   isCustomerMode: boolean;
   customLists: CustomList[];
+  catalog?: Lens[];
   onAddToList: (lens: Lens, listId: string, customPrice?: number) => void;
   isAdmin?: boolean;
   onDeleteLens?: (lensId: string) => void;
@@ -24,13 +26,12 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
   pairCount,
   isCustomerMode,
   customLists,
+  catalog,
   onAddToList,
   isAdmin,
   onDeleteLens,
   onUpdateLens,
 }) => {
-  if (!lens) return null;
-
   const [selectedListId, setSelectedListId] = useState<string>(
     customLists[0]?.id || ''
   );
@@ -60,6 +61,7 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
   const [editDeliveryType, setEditDeliveryType] = useState(lens.deliveryType || 'stock');
   const [editNotes, setEditNotes] = useState(lens.notes || '');
   const [editDistributor, setEditDistributor] = useState(lens.distributor || '');
+  const [editProductCode, setEditProductCode] = useState(lens.productCode || '');
 
   React.useEffect(() => {
     if (showDeleteConfirm) {
@@ -90,6 +92,7 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
     setEditDeliveryType(lens.deliveryType || 'stock');
     setEditNotes(lens.notes || '');
     setEditDistributor(lens.distributor || '');
+    setEditProductCode(lens.productCode || '');
     setIsEditing(false);
   }, [lens]);
 
@@ -99,6 +102,7 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
       ...lens,
       brand: editBrand.trim(),
       name: editName.trim(),
+      productCode: editProductCode.trim() || undefined,
       productType: editProductType as any,
       category: editCategory as any,
       index: editIndex.trim(),
@@ -124,7 +128,9 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
 
   const customPrice = customPriceInput ? parseFloat(customPriceInput) : undefined;
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount, customPrice);
-  const campaign = getCampaignDetails(lens, pairCount);
+  const campaign = getCampaignDetails(lens, pairCount, catalog);
+  const isZeroPriceCampaign = campaign.isCampaign && (fin.retailPrice <= 0 || !lens.retailPrice || lens.retailPrice === 0);
+  const previewCodeCost = editProductCode ? parseCostFromCode(editProductCode) : null;
   const isContact = isEditing ? (editProductType === 'contact_lens') : (lens.productType === 'contact_lens');
   const distributorName = isEditing ? editDistributor : (lens.distributor || getDistributorForBrand(lens.brand, lens.name));
   const distributorInfo = distributorName ? getDistributorInfo(distributorName) : undefined;
@@ -327,6 +333,49 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                   className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-800 bg-white font-medium focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
                   placeholder="örn: 1.60 PixAR Clean Orma"
                 />
+              </div>
+
+              {/* Ürün Kodu / Fiyat Listesi Maliyet Kodu */}
+              <div className="bg-slate-900 text-slate-100 p-3 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                    <Barcode className="w-3.5 h-3.5" />
+                    <span>Ürün Kodu (Fiyat Listesindeki Gizli/Açık Maliyet Kodu)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">JLM01337-50, SO077L vb.</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editProductCode}
+                    onChange={(e) => setEditProductCode(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-white font-mono text-xs font-semibold focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                    placeholder="örn: JLM01337-50 veya SO077L"
+                  />
+                  {previewCodeCost && previewCodeCost.parsedCost ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (previewCodeCost.parsedCost) {
+                          setEditWholesalePrice(String(previewCodeCost.parsedCost));
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition flex items-center gap-1 shrink-0"
+                      title="Koddan çözümlenen maliyeti toptan fiyata aktar"
+                    >
+                      <span>Maliyete Aktar ({formatCurrency(previewCodeCost.parsedCost, editCurrency)})</span>
+                    </button>
+                  ) : null}
+                </div>
+                {previewCodeCost && previewCodeCost.parsedCost ? (
+                  <p className="text-[10px] text-amber-300 font-medium">
+                    ✓ Koddan Algılanan Maliyet: {formatCurrency(previewCodeCost.parsedCost, editCurrency)} ({previewCodeCost.patternDescription})
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-400">
+                    Fiyat listelerinde ürünle aynı sırada yer alan kodlar otomatik toptan alış maliyeti olarak çözümlenir.
+                  </p>
+                )}
               </div>
 
               {/* Fiyatlar ve Para Birimi */}
@@ -548,9 +597,27 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                     </span>
                   </div>
 
+                  {/* Ait Olduğu Markanın Normal Liste Eşleşmesi */}
+                  <div className="bg-white/95 p-2.5 rounded-xl border border-amber-200/90 text-xs space-y-1 shadow-2xs">
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold">
+                      <span>Ait Olduğu Markanın Normal Liste Eşleşmesi:</span>
+                      {campaign.matchedSource === 'catalog_match' ? (
+                        <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold text-[10px] flex items-center gap-1 border border-emerald-200">
+                          <Check className="w-3 h-3" /> PFL Listesinden Çekildi
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 font-medium text-[10px]">Standart Katalog Fiyatı</span>
+                      )}
+                    </div>
+                    <div className="font-bold text-slate-800 text-xs">
+                      {campaign.matchedRegularName || `${lens.brand} Normal Liste Karşılığı`}
+                    </div>
+                  </div>
+
+                  {/* Perakende Satış Fiyatı Karşılaştırması */}
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-amber-200/80">
                     <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/80 shadow-2xs">
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Normal Liste Fiyatı</span>
+                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Normal Liste Satış (PFL)</span>
                       <span className="text-sm font-bold text-slate-400 line-through">
                         {formatCurrency(campaign.regularRetailPrice, lens.currency)}
                       </span>
@@ -563,10 +630,35 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Optisyen Toptan Alış Fiyatı Karşılaştırması (Müşteri Modunda Değilken) */}
+                  {!isCustomerMode && campaign.regularWholesalePrice && (
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-amber-200/60">
+                      <div className="bg-white/80 p-2 rounded-xl border border-slate-200">
+                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Normal Liste Toptan</span>
+                        <span className="text-xs font-bold text-slate-400 line-through">
+                          {formatCurrency(campaign.regularWholesalePrice, lens.currency)}
+                        </span>
+                      </div>
+                      <div className="bg-emerald-50/80 p-2 rounded-xl border border-emerald-200">
+                        <span className="text-emerald-800 block text-[10px] font-bold uppercase">Kampanyalı Net Alış</span>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-xs font-black text-emerald-700">
+                            {formatCurrency(fin.netWholesaleCost, lens.currency)}
+                          </span>
+                          {campaign.wholesaleSavingsAmount ? (
+                            <span className="text-[10px] text-emerald-800 font-bold">
+                              +{formatCurrency(campaign.wholesaleSavingsAmount, lens.currency)} Kazanç
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between text-[11px] text-amber-950 px-0.5 pt-0.5 font-medium flex-wrap gap-1">
                     <span>Geçerlilik: <strong className="text-amber-900">{campaign.campaignPeriod}</strong></span>
                     <span className="text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-lg border border-emerald-300">
-                      Tasarruf: {formatCurrency(campaign.savingsAmount, lens.currency)}
+                      Müşteri Tasarrufu: {formatCurrency(campaign.savingsAmount, lens.currency)}
                     </span>
                   </div>
                 </div>
@@ -609,6 +701,49 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Ürün / Liste Kodu Analizi (Cost Code Analysis - Yalnızca Optisyen Görünümünde) */}
+              {!isCustomerMode && (lens.productCode || fin.isCostFromCode) && (
+                <div className="bg-slate-900 text-slate-100 rounded-2xl p-3.5 border border-slate-800 shadow-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold">
+                        <Barcode className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">Fiyat Listesi Ürün / Maliyet Kodu</span>
+                        <span className="font-mono text-sm font-bold text-white tracking-wide">{lens.productCode || fin.codeCostResult?.rawCode}</span>
+                      </div>
+                    </div>
+                    {fin.isCostFromCode && (
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                        Koddan Çözümlendi
+                      </span>
+                    )}
+                  </div>
+
+                  {fin.isCostFromCode && (
+                    <div className="bg-slate-800/80 rounded-xl p-2.5 border border-slate-700/80 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Otomatik Hesaplanmış Toptan Alış:</span>
+                        <span className="text-sm font-black text-amber-400">
+                          {formatCurrency(fin.codeCostResult?.parsedCost || fin.netWholesaleCost, lens.currency)}
+                        </span>
+                      </div>
+                      <div className="text-right max-w-[65%]">
+                        <span className="text-[10px] text-slate-400 block">Şablon Açıklaması:</span>
+                        <span className="text-[11px] text-slate-300 font-medium leading-tight block">
+                          {fin.codeCostResult?.patternDescription || 'Fiyat listesi kod sütunu kuralı'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-400">
+                    💡 Fiyat listelerinde ürünün aynın sırasında yazan kodlar (örneğin J&J JLM... formatı veya SO...L gibi optik cam kodları) optisyenin gerçek toptan maliyetidir ve karlılık hesabına yansıtılır.
+                  </p>
                 </div>
               )}
 
@@ -692,7 +827,20 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                 </div>
 
                 <div className="p-3.5 space-y-3 bg-white">
-                  {isCustomerMode ? (
+                  {isZeroPriceCampaign ? (
+                    <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-center space-y-2">
+                      <div className="flex items-center justify-center gap-1.5 text-amber-950 font-extrabold text-sm">
+                        <Sparkles className="w-5 h-5 text-amber-600 animate-pulse" />
+                        <span>{campaign.campaignTitle || 'Özel Kampanya Paket Koşulları'}</span>
+                      </div>
+                      <p className="text-xs text-amber-900 font-medium leading-relaxed">
+                        {lens.notes || `Bu kampanyalı ürün için liste fiyatı tanımlanmamış olup, sadece kampanya koşulları ve paket detayları geçerlidir.`}
+                      </p>
+                      <div className="text-xs font-bold text-amber-800 bg-amber-100 px-3 py-1 rounded-full inline-block border border-amber-200">
+                        Geçerlilik: {campaign.campaignPeriod || '01.06.2026 - 31.10.2026'}
+                      </div>
+                    </div>
+                  ) : isCustomerMode ? (
                     /* Customer mode */
                     <div className="text-center py-2 space-y-1">
                       <span className="text-xs text-slate-500 font-medium">Tavsiye Edilen Satış Fiyatı</span>

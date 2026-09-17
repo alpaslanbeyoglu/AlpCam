@@ -8,6 +8,7 @@ interface LensCompactRowProps {
   brandDiscounts: BrandDiscount[];
   pairCount: 1 | 2;
   isCustomerMode: boolean;
+  catalog?: Lens[];
   onOpenDetails: (lens: Lens) => void;
   onAddToList: (lens: Lens) => void;
   isAddedToActiveList?: boolean;
@@ -20,6 +21,7 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
   brandDiscounts,
   pairCount,
   isCustomerMode,
+  catalog,
   onOpenDetails,
   onAddToList,
   isAddedToActiveList,
@@ -27,7 +29,8 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
   onDeleteLens,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
-  const campaign = getCampaignDetails(lens, pairCount);
+  const campaign = getCampaignDetails(lens, pairCount, catalog);
+  const isZeroPriceCampaign = campaign.isCampaign && (fin.retailPrice <= 0 || !lens.retailPrice || lens.retailPrice === 0);
   const isContact = lens.productType === 'contact_lens';
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
@@ -87,6 +90,11 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
               {lens.sourceListType === 'toptan' ? 'TFL' : lens.sourceListType === 'perakende' ? 'PFL' : 'KMP'}
             </span>
           ) : null}
+          {lens.productCode && !isCustomerMode && (
+            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-800 text-amber-300 border border-slate-700">
+              {lens.productCode}
+            </span>
+          )}
           <span className="text-xs font-semibold text-slate-900 truncate">
             {lens.name}
           </span>
@@ -98,6 +106,7 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
           {campaign.isCampaign && (
             <span className="text-amber-700 font-semibold ml-1.5">
               • {campaign.campaignTitle}
+              {campaign.matchedRegularName ? ` (Normal Liste: ${campaign.matchedRegularName})` : ''}
             </span>
           )}
         </div>
@@ -105,41 +114,55 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
 
       {/* Pricing Columns */}
       <div className="flex items-center gap-3 shrink-0 text-right">
-        {/* Optician Mode: Wholesale + Discount */}
-        {!isCustomerMode && (
-          <div className="hidden xs:block">
-            <div className="text-[10px] text-slate-400 font-semibold uppercase">
-              {campaign.isCampaign ? 'Kampanya Alış' : `Net Alış (-%${fin.effectiveDiscountRate})`}
+        {isZeroPriceCampaign ? (
+          <div>
+            <div className="text-[10px] text-amber-800 font-bold uppercase flex items-center gap-1 justify-end">
+              <Sparkles className="w-3 h-3 text-amber-600" />
+              <span>Kampanya Detayı</span>
             </div>
-            <div className="text-xs font-bold text-slate-800 flex items-baseline gap-1 justify-end">
-              <span>{formatCurrency(fin.netWholesaleCost, lens.currency)}</span>
-              {campaign.isCampaign && campaign.regularWholesalePrice && (
-                <span className="text-[10px] text-slate-400 line-through">
-                  {formatCurrency(campaign.regularWholesalePrice, lens.currency)}
-                </span>
-              )}
+            <div className="text-xs font-semibold text-amber-950 max-w-[220px] truncate" title={campaign.campaignTitle || lens.notes}>
+              {campaign.campaignTitle || lens.notes || 'Kampanya Koşulları'}
             </div>
           </div>
-        )}
-
-        {/* Retail Price (Always visible) */}
-        <div>
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">
-            {isCustomerMode
-              ? campaign.isCampaign ? 'Kampanyalı Satış' : 'Satış Fiyatı'
-              : campaign.isCampaign ? `Perakende (-%${campaign.discountPercent})` : `Perakende (Kar: %${fin.profitMarginPercent})`}
-          </div>
-          <div className="text-sm font-extrabold flex items-baseline gap-1.5 justify-end">
-            <span className={campaign.isCampaign ? 'text-amber-600' : 'text-emerald-700'}>
-              {formatCurrency(fin.retailPrice, lens.currency)}
-            </span>
-            {campaign.isCampaign && (
-              <span className="text-xs font-semibold text-slate-400 line-through">
-                {formatCurrency(campaign.regularRetailPrice, lens.currency)}
-              </span>
+        ) : (
+          <>
+            {/* Optician Mode: Wholesale + Discount */}
+            {!isCustomerMode && (
+              <div className="hidden xs:block">
+                <div className="text-[10px] text-slate-400 font-semibold uppercase">
+                  {campaign.isCampaign ? 'Kampanya Alış' : `Net Alış (-%${fin.effectiveDiscountRate})`}
+                </div>
+                <div className="text-xs font-bold text-slate-800 flex items-baseline gap-1 justify-end">
+                  <span>{formatCurrency(fin.netWholesaleCost, lens.currency)}</span>
+                  {campaign.isCampaign && campaign.regularWholesalePrice && (
+                    <span className="text-[10px] text-slate-400 line-through">
+                      {formatCurrency(campaign.regularWholesalePrice, lens.currency)}
+                    </span>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
-        </div>
+
+            {/* Retail Price (Always visible) */}
+            <div>
+              <div className="text-[10px] text-slate-400 font-semibold uppercase">
+                {isCustomerMode
+                  ? campaign.isCampaign ? 'Kampanyalı Satış' : 'Satış Fiyatı'
+                  : campaign.isCampaign ? `Perakende (-%${campaign.discountPercent})` : `Perakende (Kar: %${fin.profitMarginPercent})`}
+              </div>
+              <div className="text-sm font-extrabold flex items-baseline gap-1.5 justify-end">
+                <span className={campaign.isCampaign ? 'text-amber-600' : 'text-emerald-700'}>
+                  {formatCurrency(fin.retailPrice, lens.currency)}
+                </span>
+                {campaign.isCampaign && (
+                  <span className="text-xs font-semibold text-slate-400 line-through">
+                    {formatCurrency(campaign.regularRetailPrice, lens.currency)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Quick Add Button */}
         <button

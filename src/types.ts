@@ -35,6 +35,8 @@ export interface Lens {
   lensType?: 'spheric' | 'toric' | 'multifocal' | 'color'; // Kontakt Lens Tipi: Sferik, Torik (Astigmat), Multifokal, Renkli
   deliveryType: 'stock' | 'rx'; // Stok Cam/Lens (Aynı gün) vs RX Özel Üretim (3-5 gün)
   notes?: string;           // Açıklama / Özellikler
+  productCode?: string;     // Liste / Ürün Kodu (örn: JLM01337-50 veya SO077L)
+  costCode?: string;        // Kod içindeki maliyet şablonu
   isCustom?: boolean;       // Kullanıcı tarafından eklenen özel ürün
   sourceFileId?: string;    // Geldiği Drive dosya ID'si
   sourceFileName?: string;  // Geldiği PDF/Katalog dosya adı
@@ -112,4 +114,10 @@ export interface LensFinancials {
   profitAmount: number;            // Kar Tutarı (₺)
   profitMarginPercent: number;     // Kar Marjı (%) = ((Satış - Alış) / Satış) * 100
   pairCount: 1 | 2;                // 1 = Tek cam, 2 = Çift cam
+  isCostFromCode?: boolean;        // Maliyet kod sütunundaki şablondan mı çözümlendi
+  codeCostResult?: {
+    rawCode: string;
+    parsedCost: number;
+    patternDescription?: string;
+  };
 }
