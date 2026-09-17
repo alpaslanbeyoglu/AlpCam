@@ -150,7 +150,7 @@ async function analyzeBufferWithGemini(
   productTypeHint: 'auto' | 'eyeglass_lens' | 'contact_lens' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+  const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
 
   // Ensure mimeType is compatible with Gemini
   let finalMimeType = mimeType;
