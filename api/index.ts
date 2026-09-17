@@ -151,10 +151,9 @@ async function analyzeBufferWithGemini(
 ) {
   const b64 = buffer.toString('base64');
   const modelsToTry = [
-    'gemini-3.8-flash',
     'gemini-3.1-flash-lite',
-    'gemini-3.1-pro-preview',
-    'gemini-2.0-flash-lite-preview-02-05'
+    'gemini-flash-latest',
+    'gemini-3.1-pro-preview'
   ];
 
   // Ensure mimeType is compatible with Gemini
@@ -345,9 +344,43 @@ Sadece geçerli bir JSON döndür.`;
         });
 
         const rawText = interaction.output_text || '{}';
-        // Clean potential markdown formatting
-        const cleanRawText = rawText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-        const parsed = JSON.parse(cleanRawText);
+        
+        // Robust JSON extraction
+        let cleanRawText = rawText.trim();
+        const jsonMatch = cleanRawText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleanRawText = jsonMatch[0];
+        }
+
+        // Handle unterminated strings or truncated JSON
+        let parsed;
+        try {
+          parsed = JSON.parse(cleanRawText);
+        } catch (parseErr) {
+          console.warn(`[Gemini] Initial JSON parse failed for ${modelName}, attempting repair...`);
+          // Basic repair for truncated JSON (close quotes and brackets)
+          let repaired = cleanRawText;
+          
+          // Close unclosed quote if we cut off mid-string
+          const quoteCount = (repaired.match(/"/g) || []).length;
+          if (quoteCount % 2 !== 0) repaired += '"';
+
+          const openBraces = (repaired.match(/\{/g) || []).length;
+          const closeBraces = (repaired.match(/\}/g) || []).length;
+          const openBrackets = (repaired.match(/\[/g) || []).length;
+          const closeBrackets = (repaired.match(/\]/g) || []).length;
+          
+          if (openBrackets > closeBrackets) repaired += ']'.repeat(openBrackets - closeBrackets);
+          if (openBraces > closeBraces) repaired += '}'.repeat(openBraces - closeBraces);
+          
+          try {
+            parsed = JSON.parse(repaired);
+          } catch (repairErr) {
+            console.error(`[Gemini] JSON repair failed for ${modelName}:`, repairErr);
+            throw parseErr; // Throw original error if repair fails
+          }
+        }
+
         const rawLenses = Array.isArray(parsed) ? parsed : (parsed.lenses || []);
         const fileListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 
           parsed.listType || detectedListType;

@@ -6,10 +6,12 @@ service cloud.firestore {
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
-    function isAdmin() { return isSignedIn() && (
-      exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-      request.auth.token.email == 'alpaslan.beyoglu@gmail.com'
-    ); }
+    function isAdmin() { 
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.keys().contains('email') && request.auth.token.email == 'alpaslan.beyoglu@gmail.com')
+      ); 
+    }
 
     // Default deny
     match /{document=**} {
@@ -49,7 +51,7 @@ service cloud.firestore {
 
     // Processed Files Rules
     match /processedFiles/{fileId} {
-      allow read: if true;
+      allow get, list: if true;
       allow write: if isAdmin();
     }
 
