@@ -150,7 +150,7 @@ async function analyzeBufferWithGemini(
   productTypeHint: 'auto' | 'eyeglass_lens' | 'contact_lens' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+  const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-flash-latest'];
 
   // Ensure mimeType is compatible with Gemini
   let finalMimeType = mimeType;
@@ -403,8 +403,9 @@ Sadece geçerli bir JSON döndür.`;
         if (err?.status === 503 || err?.message?.includes('503') || err?.status === 429 || err?.message?.includes('429')) {
           retries--;
           if (retries >= 0) {
-            console.log(`[Gemini] Waiting 5 seconds before retrying ${modelName}...`);
-            await delay(5000);
+            const waitTime = (err?.status === 429 || err?.message?.includes('429')) ? 30000 : 10000;
+            console.log(`[Gemini] Waiting ${waitTime / 1000} seconds before retrying ${modelName}...`);
+            await delay(waitTime);
             continue;
           }
         }

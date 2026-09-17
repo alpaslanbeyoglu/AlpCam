@@ -2,7 +2,8 @@ import { Lens, BrandDiscount, CustomList, DriveSyncConfig } from '../types';
 import { INITIAL_LENSES } from '../data/initialLenses';
 import { INITIAL_DISCOUNTS } from '../data/initialDiscounts';
 import { sanitizeLens, normalizeBrandName } from './pricing';
-import { DistributorInfo, DISTRIBUTORS_LIST } from '../data/distributors';
+import { DistributorInfo } from '../data/distributors';
+import { INITIAL_DISTRIBUTORS_LIST } from '../data/initialDistributors';
 
 const KEYS = {
   LENSES: 'optik_lenses_v1',
@@ -204,7 +205,7 @@ export function loadStoredDistributors(): DistributorInfo[] {
     console.error('Failed to load distributors from storage:', err);
   }
   // Return the default initial distributors list if empty or never saved
-  return DISTRIBUTORS_LIST;
+  return INITIAL_DISTRIBUTORS_LIST;
 }
 
 export function saveStoredDistributors(distributors: DistributorInfo[]): void {
