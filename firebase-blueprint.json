@@ -1,56 +1,113 @@
 {
-  "collections": {
+  "entities": {
+    "Lens": {
+      "title": "Lens",
+      "description": "Optical lens or contact lens product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "brand": { "type": "string" },
+        "distributor": { "type": "string" },
+        "name": { "type": "string" },
+        "productType": { "type": "string", "enum": ["eyeglass_lens", "contact_lens"] },
+        "category": { "type": "string" },
+        "index": { "type": "string" },
+        "material": { "type": "string" },
+        "coating": { "type": "string" },
+        "wholesalePrice": { "type": "number" },
+        "retailPrice": { "type": "number" },
+        "currency": { "type": "string" },
+        "sphRange": { "type": "string" },
+        "cylMax": { "type": "number" },
+        "diameter": { "type": "string" },
+        "baseCurve": { "type": "string" },
+        "boxContent": { "type": "string" },
+        "wearPeriod": { "type": "string" },
+        "lensType": { "type": "string" },
+        "deliveryType": { "type": "string", "enum": ["stock", "rx"] },
+        "notes": { "type": "string" },
+        "isCustom": { "type": "boolean" },
+        "sourceFileId": { "type": "string" },
+        "sourceFileName": { "type": "string" },
+        "sourceListType": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "brand", "name", "updatedAt"]
+    },
+    "BrandDiscount": {
+      "title": "Brand Discount",
+      "description": "Discount configuration for a brand",
+      "type": "object",
+      "properties": {
+        "brand": { "type": "string" },
+        "distributor": { "type": "string" },
+        "discount1": { "type": "number" },
+        "discount2": { "type": "number" },
+        "categoryOverrides": { "type": "object" }
+      },
+      "required": ["brand"]
+    },
+    "CustomList": {
+      "title": "Custom List",
+      "description": "Saved list of lenses for a patient or quote",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "items": { "type": "array" },
+        "patientName": { "type": "string" },
+        "targetProfitMargin": { "type": "number" }
+      },
+      "required": ["id", "name", "createdAt", "updatedAt"]
+    },
+    "ProcessedFile": {
+      "title": "Processed File",
+      "description": "Record of a scanned Drive file",
+      "type": "object",
+      "properties": {
+        "fileId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "lastScanTime": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["success", "error", "pending"] },
+        "message": { "type": "string" },
+        "extractedCount": { "type": "number" }
+      },
+      "required": ["fileId", "fileName", "lastScanTime", "status"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "User with administrative privileges",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "manager"] }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
     "catalog": {
-      "id": "string",
-      "brand": "string",
-      "distributor": "string",
-      "name": "string",
-      "productType": "string",
-      "category": "string",
-      "index": "string",
-      "material": "string",
-      "coating": "string",
-      "wholesalePrice": "number",
-      "retailPrice": "number",
-      "currency": "string",
-      "sphRange": "string",
-      "cylMax": "number",
-      "diameter": "string",
-      "baseCurve": "string",
-      "boxContent": "string",
-      "wearPeriod": "string",
-      "lensType": "string",
-      "deliveryType": "string",
-      "notes": "string",
-      "isCustom": "boolean",
-      "sourceFileId": "string",
-      "sourceFileName": "string",
-      "sourceListType": "string",
-      "updatedAt": "string"
+      "schema": "Lens",
+      "description": "Master product catalog"
     },
     "discounts": {
-      "brand": "string",
-      "distributor": "string",
-      "discount1": "number",
-      "discount2": "number",
-      "categoryOverrides": "map"
+      "schema": "BrandDiscount",
+      "description": "Brand-specific discounts"
     },
     "customLists": {
-      "id": "string",
-      "name": "string",
-      "description": "string",
-      "createdAt": "string",
-      "updatedAt": "string",
-      "items": "array",
-      "patientName": "string",
-      "targetProfitMargin": "number"
+      "schema": "CustomList",
+      "description": "User's saved quotes and lists"
     },
     "processedFiles": {
-      "fileId": "string",
-      "fileName": "string",
-      "lastScanTime": "string",
-      "status": "string",
-      "message": "string"
+      "schema": "ProcessedFile",
+      "description": "Sync status for Drive files"
+    },
+    "admins": {
+      "schema": "Admin",
+      "description": "Administrative users"
     }
   }
 }

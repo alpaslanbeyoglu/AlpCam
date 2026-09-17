@@ -15,6 +15,7 @@ export interface DriveFolderFileInfo {
   driveViewUrl: string;
   status?: 'pending' | 'scanning' | 'completed' | 'error';
   extractedCount?: number;
+  errorMessage?: string;
 }
 
 export const KNOWN_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1Euefi9y_ngCtzEVcOs4mi2cJZKHZ-SBB?usp=sharing';

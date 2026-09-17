@@ -151,14 +151,10 @@ async function analyzeBufferWithGemini(
 ) {
   const b64 = buffer.toString('base64');
   const modelsToTry = [
-    'gemini-3.5-flash-lite', 
-    'gemini-3.6-flash',
-    'gemini-1.5-flash',
+    'gemini-3.8-flash',
     'gemini-3.1-flash-lite',
-    'gemini-3.8-flash', 
-    'gemini-flash-latest', 
-    'gemini-2.0-flash-lite-preview-02-05',
-    'gemini-1.5-pro'
+    'gemini-3.1-pro-preview',
+    'gemini-2.0-flash-lite-preview-02-05'
   ];
 
   // Ensure mimeType is compatible with Gemini
@@ -291,25 +287,64 @@ Sadece geçerli bir JSON döndür.`;
       try {
         console.log(`[Gemini] Scanning ${fileName} with model ${modelName} (priceMode: ${priceMode})...`);
         const aiClient = getAiClient();
-        const response = await aiClient.models.generateContent({
+        
+        // Use interactions.create for better consistency with modern SDK patterns
+        const interaction = await (aiClient as any).interactions.create({
           model: modelName,
-          contents: [
+          input: [
             {
-              inlineData: {
-                mimeType: finalMimeType,
-                data: b64,
-              },
+              type: finalMimeType.startsWith('image') ? 'image' : 'document',
+              data: b64,
+              mime_type: finalMimeType,
             },
-            { text: prompt },
+            {
+              type: 'text',
+              text: prompt
+            }
           ],
-          config: {
-            responseMimeType: 'application/json',
+          response_format: {
+            type: 'object',
+            properties: {
+              brand: { type: 'string' },
+              distributor: { type: 'string' },
+              listType: { type: 'string' },
+              lenses: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    brand: { type: 'string' },
+                    distributor: { type: 'string' },
+                    productType: { type: 'string' },
+                    category: { type: 'string' },
+                    index: { type: 'string' },
+                    material: { type: 'string' },
+                    coating: { type: 'string' },
+                    wholesalePrice: { type: 'number' },
+                    retailPrice: { type: 'number' },
+                    currency: { type: 'string' },
+                    deliveryType: { type: 'string' },
+                    boxContent: { type: 'string' },
+                    wearPeriod: { type: 'string' },
+                    lensType: { type: 'string' },
+                    baseCurve: { type: 'string' },
+                    diameter: { type: 'string' },
+                    sphRange: { type: 'string' },
+                    cylMax: { type: 'number' },
+                    notes: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          generation_config: {
             temperature: 0.1,
-            maxOutputTokens: 65536,
+            max_output_tokens: 65536,
           },
         });
 
-        const rawText = response.text || '{}';
+        const rawText = interaction.output_text || '{}';
         // Clean potential markdown formatting
         const cleanRawText = rawText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
         const parsed = JSON.parse(cleanRawText);
@@ -516,6 +551,7 @@ app.post('/api/drive/scan-file', async (req, res) => {
 
     console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId}) with priceMode: ${priceMode}...`);
     const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    console.log(`[Proxy] Downloading from: ${downloadUrl}`);
     const fileRes = await fetch(downloadUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',

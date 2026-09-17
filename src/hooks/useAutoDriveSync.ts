@@ -12,7 +12,7 @@ export function useAutoDriveSync(
   const [isSyncing, setIsSyncing] = useState(false);
 
   const syncDrive = async (folderUrl: string) => {
-    if (!isAdmin || isSyncing) return;
+    if (isSyncing) return;
     
     setIsSyncing(true);
     if (onStatusChange) onStatusChange(true, 'Google Drive listesi kontrol ediliyor...');
@@ -28,7 +28,9 @@ export function useAutoDriveSync(
       // 3. Find new files
       const newFiles = driveFiles.filter(f => !processedIds.has(f.id));
 
-      if (newFiles.length === 0) {
+      // If not admin, we can't scan new files, just stop here.
+      // But we've already benefited by useFirebaseCatalog loading existing lenses.
+      if (!isAdmin || newFiles.length === 0) {
         if (onStatusChange) onStatusChange(false, '');
         setIsSyncing(false);
         return;

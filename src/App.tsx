@@ -41,6 +41,7 @@ import { DriveSyncView } from './components/DriveSyncView';
 import { DefinitionsView } from './components/DefinitionsView';
 import { AddLensModal } from './components/AddLensModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
+import { BulkEditActions } from './components/BulkEditActions';
 import { useExchangeRates } from './hooks/useExchangeRates';
 
 import {
@@ -144,7 +145,7 @@ export default function App() {
 
   useEffect(() => {
     saveIsAdminSession(isAdmin);
-    if (isAdmin && driveConfig.sourceUrl) {
+    if (driveConfig.sourceUrl) {
       syncDrive(driveConfig.sourceUrl);
     }
   }, [isAdmin]);
@@ -267,6 +268,41 @@ export default function App() {
     });
     return Array.from(set).sort((a, b) => parseFloat(a) - parseFloat(b));
   }, [lenses, selectedProductType, selectedDistributor, selectedBrand]);
+
+  const handleBulkUpdate = async (updates: Partial<Lens> | { priceMultiplier: number; type: 'percent' | 'fixed' }) => {
+    if (!isAdmin || filteredLenses.length === 0) return;
+
+    if ('priceMultiplier' in updates) {
+      const { priceMultiplier, type } = updates;
+      const multiplier = 1 + priceMultiplier / 100;
+      
+      const updatedLenses = filteredLenses.map(l => {
+        const newL = { ...l };
+        if (type === 'percent') {
+          if (newL.wholesalePrice) newL.wholesalePrice = Math.round(newL.wholesalePrice * multiplier * 100) / 100;
+          if (newL.retailPrice) newL.retailPrice = Math.round(newL.retailPrice * multiplier * 100) / 100;
+        } else {
+          if (newL.wholesalePrice) newL.wholesalePrice = Math.round((newL.wholesalePrice + priceMultiplier) * 100) / 100;
+          if (newL.retailPrice) newL.retailPrice = Math.round((newL.retailPrice + priceMultiplier) * 100) / 100;
+        }
+        return newL;
+      });
+      await saveLenses(updatedLenses, 'merge');
+      showToast(`${filteredLenses.length} ürünün fiyatı güncellendi.`);
+    } else {
+      const updatedLenses = filteredLenses.map(l => ({ ...l, ...updates }));
+      await saveLenses(updatedLenses, 'merge');
+      showToast(`${filteredLenses.length} ürünün bilgileri güncellendi.`);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!isAdmin || filteredLenses.length === 0) return;
+    if (!window.confirm(`${filteredLenses.length} ürünü silmek istediğinize emin misiniz?`)) return;
+
+    await Promise.all(filteredLenses.map(l => deleteLens(l.id)));
+    showToast(`${filteredLenses.length} ürün silindi.`);
+  };
 
   const handleBulkPriceIncrease = async (percent: number, brandFilter?: string) => {
     const multiplier = 1 + percent / 100;
@@ -749,6 +785,14 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* Bulk Actions UI */}
+          <BulkEditActions
+            selectedCount={filteredLenses.length}
+            isAdmin={isAdmin}
+            onBulkUpdate={handleBulkUpdate}
+            onBulkDelete={handleBulkDelete}
+          />
 
           {/* Floating Action Button to Add Custom Lens (Admin Only or prompts Login) */}
           <div className="fixed bottom-4 right-4 z-30 sm:bottom-6 sm:right-6">

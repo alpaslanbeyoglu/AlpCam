@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DriveSyncConfig, Lens } from '../types';
+import { DriveSyncConfig, Lens, ParsedDriveFile } from '../types';
 import {
   KNOWN_DRIVE_FOLDER_URL,
   KNOWN_DRIVE_FILES,
@@ -311,19 +311,31 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
           ? 'retail'
           : 'auto';
 
-      const res = await scanSingleDriveFile(file, {
-        priceMode: effectivePriceMode,
-        profitMarkup: effectivePriceMode === 'retail' ? 1.0 : effectiveFileMarkup,
-        productTypeHint: productTypeHint,
-      });
+      try {
+        const res = await scanSingleDriveFile(file, {
+          priceMode: effectivePriceMode,
+          profitMarkup: effectivePriceMode === 'retail' ? 1.0 : effectiveFileMarkup,
+          productTypeHint: productTypeHint,
+        });
 
-      if (res.success && res.lenses.length > 0) {
-        // Real-time update: Add lenses to catalog as soon as file is finished
-        onUpdateLenses(res.lenses, 'merge');
-        
-        // Update file state locally
+        if (res.success && res.lenses.length > 0) {
+          // Real-time update: Add lenses to catalog as soon as file is finished
+          onUpdateLenses(res.lenses, 'merge');
+          
+          // Update file state locally
+          setDriveFiles((prev) =>
+            prev.map((f) => (f.id === file.id ? { ...f, status: 'completed', extractedCount: res.lenses.length } : f))
+          );
+        } else if (!res.success) {
+          console.error(`Error scanning ${file.name}:`, res.error);
+          setDriveFiles((prev) =>
+            prev.map((f) => (f.id === file.id ? { ...f, status: 'error', errorMessage: res.error } : f))
+          );
+        }
+      } catch (err: any) {
+        console.error(`Fatal error scanning ${file.name}:`, err);
         setDriveFiles((prev) =>
-          prev.map((f) => (f.id === file.id ? { ...f, status: 'completed', extractedCount: res.lenses.length } : f))
+          prev.map((f) => (f.id === file.id ? { ...f, status: 'error', errorMessage: err.message } : f))
         );
       }
     }
@@ -1514,6 +1526,14 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                       </div>
                     );
                   })()}
+                  {file.status === 'error' && file.errorMessage && (
+                    <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-[10px] text-rose-700 flex items-start gap-1.5 animate-in fade-in slide-in-from-top-1 duration-300">
+                      <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span className="font-medium line-clamp-2" title={file.errorMessage}>
+                        Hata: {file.errorMessage}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Card Actions */}

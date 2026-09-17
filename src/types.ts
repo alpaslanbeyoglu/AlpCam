@@ -90,6 +90,15 @@ export interface DriveSyncConfig {
   driveFolderId?: string;
 }
 
+export interface ParsedDriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  thumbnailLink?: string;
+  webViewLink?: string;
+  extractedLenses?: Lens[];
+}
+
 export interface LensFinancials {
   wholesaleListPrice: number;      // Liste Toptan Fiyatı
   effectiveDiscountRate: number;    // Efektif Net İskonto % (örn: %46.0)
