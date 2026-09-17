@@ -607,3 +607,10 @@ export function getCampaignDetails(
   };
 }
 
+export function isContactLensSolution(lens: { name?: string; category?: string; index?: string; material?: string; notes?: string; productType?: string }): boolean {
+  if (lens.productType === 'solution' || lens.category === 'solution') return true;
+  const text = `${lens.name || ''} ${lens.category || ''} ${lens.index || ''} ${lens.material || ''} ${lens.notes || ''}`.toLowerCase();
+  return text.includes('solüsyon') || text.includes('solution') || text.includes('solusyon') || text.includes('bakım solüsyonu') || text.includes('dezenfeksiyon solüsyonu');
+}
+
+

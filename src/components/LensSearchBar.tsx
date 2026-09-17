@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown, Eye, Glasses, Building2 } from 'lucide-react';
+import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown, Eye, Glasses, Building2, Droplet } from 'lucide-react';
 import { LensCategory, ProductType } from '../types';
 
 interface LensSearchBarProps {
@@ -9,10 +9,11 @@ interface LensSearchBarProps {
   setCatalogSection: (section: 'regular' | 'campaign') => void;
   regularCount: number;
   campaignCount: number;
-  selectedProductType: 'all' | 'eyeglass_lens' | 'contact_lens';
-  setSelectedProductType: (val: 'all' | 'eyeglass_lens' | 'contact_lens') => void;
+  selectedProductType: 'all' | 'eyeglass_lens' | 'contact_lens' | 'solution';
+  setSelectedProductType: (val: 'all' | 'eyeglass_lens' | 'contact_lens' | 'solution') => void;
   eyeglassCount: number;
   contactLensCount: number;
+  solutionCount: number;
   selectedDistributor?: string;
   setSelectedDistributor?: (dist: string) => void;
   availableDistributors?: { name: string; shortName: string; count: number }[];
@@ -74,6 +75,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
   setSelectedProductType,
   eyeglassCount,
   contactLensCount,
+  solutionCount,
   selectedDistributor = 'all',
   setSelectedDistributor = (_dist: string) => {},
   availableDistributors = [],
@@ -249,7 +251,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
           >
             <span>Tümü</span>
             <span className="px-1 py-0.2 rounded-full bg-slate-200/80 text-[9px] text-slate-700">
-              {eyeglassCount + contactLensCount}
+              {eyeglassCount + contactLensCount + solutionCount}
             </span>
           </button>
 
@@ -280,6 +282,21 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             <span>Kontakt Lensler</span>
             <span className={`px-1 py-0.2 rounded-full text-[9px] ${selectedProductType === 'contact_lens' ? 'bg-teal-700 text-white' : 'bg-slate-200/80 text-slate-700'}`}>
               {contactLensCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSelectedProductType('solution')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+              selectedProductType === 'solution'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-purple-700'
+            }`}
+          >
+            <Droplet className="w-3.5 h-3.5 shrink-0" />
+            <span>Solüsyonlar</span>
+            <span className={`px-1 py-0.2 rounded-full text-[9px] ${selectedProductType === 'solution' ? 'bg-purple-700 text-white' : 'bg-slate-200/80 text-slate-700'}`}>
+              {solutionCount}
             </span>
           </button>
         </div>

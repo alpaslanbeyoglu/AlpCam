@@ -26,7 +26,7 @@ import {
   saveIsAdminSession,
 } from './utils/storage';
 import { fetchFromDriveUrl, parseExcelOrCsvData } from './utils/driveSync';
-import { sanitizeLens, setGlobalExchangeRates, isCampaignLens } from './utils/pricing';
+import { sanitizeLens, setGlobalExchangeRates, isCampaignLens, isContactLensSolution } from './utils/pricing';
 import { getDistributorForBrand, getDistributorInfo } from './data/distributors';
 
 // Components
@@ -99,7 +99,7 @@ export default function App() {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [catalogSection, setCatalogSection] = useState<'regular' | 'campaign'>('regular');
-  const [selectedProductType, setSelectedProductType] = useState<'all' | 'eyeglass_lens' | 'contact_lens'>('all');
+  const [selectedProductType, setSelectedProductType] = useState<'all' | 'eyeglass_lens' | 'contact_lens' | 'solution'>('all');
   const [selectedDistributor, setSelectedDistributor] = useState('all');
   const [selectedBrand, setSelectedBrand] = useState('all');
   const [selectedIndex, setSelectedIndex] = useState('all');
@@ -322,7 +322,7 @@ export default function App() {
     showToast(`Katalog fiyatlarına %${percent} oranında toplu zam uygulandı (${updated.length} ürün).`);
   };
 
-  const handleProductTypeChange = (val: 'all' | 'eyeglass_lens' | 'contact_lens') => {
+  const handleProductTypeChange = (val: 'all' | 'eyeglass_lens' | 'contact_lens' | 'solution') => {
     setSelectedProductType(val);
     setSelectedDistributor('all');
     setSelectedBrand('all');
@@ -339,7 +339,9 @@ export default function App() {
       });
       if (match) {
         const sanitized = sanitizeLens(match);
-        if (sanitized.productType === 'contact_lens') {
+        if (isContactLensSolution(sanitized)) {
+          setSelectedProductType('solution');
+        } else if (sanitized.productType === 'contact_lens') {
           setSelectedProductType('contact_lens');
         } else {
           setSelectedProductType('eyeglass_lens');
@@ -362,7 +364,9 @@ export default function App() {
       });
       if (match) {
         const sanitized = sanitizeLens(match);
-        if (sanitized.productType === 'contact_lens') {
+        if (isContactLensSolution(sanitized)) {
+          setSelectedProductType('solution');
+        } else if (sanitized.productType === 'contact_lens') {
           setSelectedProductType('contact_lens');
         } else {
           setSelectedProductType('eyeglass_lens');
@@ -377,11 +381,24 @@ export default function App() {
   };
 
   const eyeglassCount = useMemo(
-    () => lenses.filter((l) => sanitizeLens(l).productType !== 'contact_lens').length,
+    () => lenses.filter((l) => {
+      const sanitized = sanitizeLens(l);
+      return sanitized.productType !== 'contact_lens' && !isContactLensSolution(sanitized);
+    }).length,
     [lenses]
   );
   const contactLensCount = useMemo(
-    () => lenses.filter((l) => sanitizeLens(l).productType === 'contact_lens').length,
+    () => lenses.filter((l) => {
+      const sanitized = sanitizeLens(l);
+      return sanitized.productType === 'contact_lens' && !isContactLensSolution(sanitized);
+    }).length,
+    [lenses]
+  );
+  const solutionCount = useMemo(
+    () => lenses.filter((l) => {
+      const sanitized = sanitizeLens(l);
+      return isContactLensSolution(sanitized);
+    }).length,
     [lenses]
   );
   const regularCount = useMemo(
@@ -403,11 +420,15 @@ export default function App() {
         if (catalogSection === 'regular' && isCamp) return false;
         if (catalogSection === 'campaign' && !isCamp) return false;
 
-        // 0.5 Product Type (eyeglass_lens vs contact_lens)
-        if (selectedProductType === 'eyeglass_lens' && lens.productType === 'contact_lens') {
+        // 0.5 Product Type (eyeglass_lens vs contact_lens vs solution)
+        const isSol = isContactLensSolution(lens);
+        if (selectedProductType === 'eyeglass_lens' && (lens.productType === 'contact_lens' || isSol)) {
           return false;
         }
-        if (selectedProductType === 'contact_lens' && lens.productType !== 'contact_lens') {
+        if (selectedProductType === 'contact_lens' && (lens.productType !== 'contact_lens' || isSol)) {
+          return false;
+        }
+        if (selectedProductType === 'solution' && !isSol) {
           return false;
         }
 
@@ -712,6 +733,7 @@ export default function App() {
             setSelectedProductType={handleProductTypeChange}
             eyeglassCount={eyeglassCount}
             contactLensCount={contactLensCount}
+            solutionCount={solutionCount}
             selectedDistributor={selectedDistributor}
             setSelectedDistributor={handleDistributorChange}
             availableDistributors={availableDistributors}
