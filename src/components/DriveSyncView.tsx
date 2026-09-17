@@ -18,6 +18,7 @@ import {
 } from '../utils/driveSync';
 import { isContactLens } from '../utils/pricing';
 import { getDistributorForBrand, getDistributorInfo, DISTRIBUTORS_LIST } from '../data/distributors';
+import { FlipbookViewer } from './FlipbookViewer';
 import {
   Cloud,
   FileText,
@@ -50,6 +51,7 @@ import {
   Building2,
   Percent,
   Database,
+  BookOpen,
 } from 'lucide-react';
 
 interface DriveSyncViewProps {
@@ -90,6 +92,8 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   const [productTypeHint, setProductTypeHint] = useState<'auto' | 'eyeglass_lens' | 'contact_lens'>('auto');
 
   // Scanning state
+  const [subTab, setSubTab] = useState<'files' | 'scanning'>('files');
+  const [activeFlipbookFile, setActiveFlipbookFile] = useState<ParsedDriveFile | null>(null);
   const [scanningFileId, setScanningFileId] = useState<string | null>(null);
   const [isBatchScanning, setIsBatchScanning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; filename: string }>({
@@ -280,6 +284,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   const handleBatchScanAll = async () => {
     if (!driveFiles || driveFiles.length === 0) return;
 
+    setSubTab('scanning');
     setIsBatchScanning(true);
     setStatusMessage({
       type: 'info',
@@ -287,8 +292,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     });
 
     const targetFiles = driveFiles; // Scan all detected files from the drive folder
-    let accumulatedLenses: Lens[] = [];
-
+    
     for (let i = 0; i < targetFiles.length; i++) {
       const file = targetFiles[i];
       const effectiveFileMarkup = file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
@@ -312,21 +316,23 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
         profitMarkup: effectivePriceMode === 'retail' ? 1.0 : effectiveFileMarkup,
         productTypeHint: productTypeHint,
       });
+
       if (res.success && res.lenses.length > 0) {
-        accumulatedLenses = [...accumulatedLenses, ...res.lenses];
+        // Real-time update: Add lenses to catalog as soon as file is finished
+        onUpdateLenses(res.lenses, 'merge');
+        
+        // Update file state locally
+        setDriveFiles((prev) =>
+          prev.map((f) => (f.id === file.id ? { ...f, status: 'completed', extractedCount: res.lenses.length } : f))
+        );
       }
     }
 
     setIsBatchScanning(false);
-
-    if (accumulatedLenses.length > 0) {
-      setPreviewSourceName(`Google Drive Klasör Taraması (${targetFiles.length} Dosya)`);
-      setPreviewLenses(accumulatedLenses);
-      setStatusMessage({
-        type: 'success',
-        message: `Toplu tarama tamamlandı! Toplam ${accumulatedLenses.length} ürün tespit edildi.`,
-      });
-    }
+    setStatusMessage({
+      type: 'success',
+      message: `Toplu tarama tamamlandı! Tüm ürünler kataloğa gerçek zamanlı olarak eklendi.`,
+    });
   };
 
   // Apply previewed lenses to actual catalog
@@ -460,107 +466,221 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
           </div>
         </div>
 
-        {/* Drive Folder Connection Bar */}
-        <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs">
-          <div className="flex-1 w-full space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                <FolderOpen className="w-4 h-4 text-sky-600" />
-                <span>Bağlı Google Drive Klasörü:</span>
-              </span>
-              <a
-                href={folderUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sky-600 hover:text-sky-800 font-medium inline-flex items-center gap-1 text-[11px]"
-              >
-                <span>Klasörü Drive'da Aç</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                disabled={!isAdmin}
-                value={folderUrl}
-                onChange={(e) => setFolderUrl(e.target.value)}
-                placeholder="https://drive.google.com/drive/folders/..."
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 text-xs font-mono focus:ring-2 focus:ring-sky-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
-              />
-              {isAdmin && (
-                <button
-                  onClick={() => setFolderUrl(KNOWN_DRIVE_FOLDER_URL)}
-                  title="Varsayılan Klasör URL'sine Sıfırla"
-                  className="px-2.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg text-slate-600 transition"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
+        {/* COMMON FEEDBACK & PREVIEW AREA */}
+        <div className="px-4 sm:px-5">
+          {statusMessage.type && (
+            <div
+              className={`p-4 mt-4 rounded-xl border text-xs flex items-start gap-3 animate-in fade-in slide-in-from-top-2 ${
+                statusMessage.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : statusMessage.type === 'error'
+                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                  : 'bg-sky-50 border-sky-200 text-sky-900'
+              }`}
+            >
+              {statusMessage.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              ) : statusMessage.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              ) : (
+                <Sparkles className="w-5 h-5 text-sky-600 shrink-0 mt-0.5 animate-pulse" />
               )}
+              <div className="space-y-1">
+                <div className="font-semibold">{statusMessage.message}</div>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2 self-end md:self-center">
-            <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 text-[11px] flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>
-                Son Senkron: <strong>{config.lastSyncTime ? new Date(config.lastSyncTime).toLocaleDateString('tr-TR') : 'Şimdi'}</strong>
-              </span>
+          {previewLenses && previewLenses.length > 0 && (
+            <div className="bg-white rounded-2xl border border-sky-200 shadow-lg shadow-sky-500/5 overflow-hidden mt-4 animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="p-4 bg-sky-600 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-lg">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold">AI Tarama Önizlemesi: {previewSourceName}</h2>
+                    <p className="text-[10px] opacity-90 leading-tight">
+                      Aşağıdaki ürünler başarıyla tespit edildi ve kataloğunuza işlendi.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPreviewLenses(null)}
+                    className="px-4 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold transition flex items-center gap-2"
+                  >
+                    <span>Kapat</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto max-h-[300px]">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10 shadow-sm">
+                    <tr>
+                      <th className="p-2.5 font-bold text-slate-500 uppercase tracking-wider w-16">Tür</th>
+                      <th className="p-2.5 font-bold text-slate-500 uppercase tracking-wider">Marka / Ürün Adı</th>
+                      <th className="p-2.5 font-bold text-slate-500 uppercase tracking-wider text-right">Perakende</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {previewLenses.slice(0, 10).map((pl, idx) => (
+                      <tr key={idx} className="hover:bg-sky-50/30 transition-colors">
+                        <td className="p-2.5">
+                          <span className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 text-[10px] font-bold uppercase">
+                            {isContactLens(pl) ? 'LENS' : 'CAM'}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-medium text-slate-900">
+                          <span className="font-bold text-sky-700 mr-1.5">[{pl.brand}]</span>
+                          {pl.name}
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-slate-900">
+                          {pl.retailPrice} ₺
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Feedback Alert */}
-        {statusMessage.type && (
-          <div
-            className={`p-4 mx-4 sm:mx-5 mt-4 rounded-xl border text-xs flex items-start gap-3 ${
-              statusMessage.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : statusMessage.type === 'error'
-                ? 'bg-rose-50 border-rose-200 text-rose-900'
-                : 'bg-sky-50 border-sky-200 text-sky-900'
+        {/* Sub-tabs Navigation */}
+        <div className="flex border-b border-slate-100 bg-slate-50/50 mt-4">
+          <button
+            onClick={() => setSubTab('files')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition flex items-center justify-center gap-2 ${
+              subTab === 'files'
+                ? 'bg-white text-sky-700 border-b-2 border-sky-600'
+                : 'text-slate-500 hover:bg-slate-100'
             }`}
           >
-            {statusMessage.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            ) : statusMessage.type === 'error' ? (
-              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-            ) : (
-              <Sparkles className="w-5 h-5 text-sky-600 shrink-0 mt-0.5 animate-pulse" />
+            <FolderOpen className="w-4 h-4" />
+            <span>Drive Klasör Listesi</span>
+          </button>
+          <button
+            onClick={() => setSubTab('scanning')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition flex items-center justify-center gap-2 ${
+              subTab === 'scanning'
+                ? 'bg-white text-sky-700 border-b-2 border-sky-600'
+                : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>AI Tarama Merkezi</span>
+            {isBatchScanning && (
+              <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
             )}
-            <div className="space-y-1">
-              <div className="font-semibold">{statusMessage.message}</div>
-              {statusMessage.details && statusMessage.details.length > 0 && (
-                <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-                  {statusMessage.details.map((d, i) => (
-                    <li key={i}>{d}</li>
-                  ))}
-                </ul>
-              )}
+          </button>
+        </div>
+
+        {/* DRIVE CONTENT TABS */}
+        {subTab === 'files' ? (
+          <>
+            {/* Drive Folder Connection Bar */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs">
+              <div className="flex-1 w-full space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <FolderOpen className="w-4 h-4 text-sky-600" />
+                    <span>Bağlı Google Drive Klasörü:</span>
+                  </span>
+                  <a
+                    href={folderUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sky-600 hover:text-sky-800 font-medium inline-flex items-center gap-1 text-[11px]"
+                  >
+                    <span>Klasörü Drive'da Aç</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    disabled={!isAdmin}
+                    value={folderUrl}
+                    onChange={(e) => setFolderUrl(e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/..."
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 text-xs font-mono focus:ring-2 focus:ring-sky-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                  {isAdmin && (
+                    <button
+                      onClick={() => setFolderUrl(KNOWN_DRIVE_FOLDER_URL)}
+                      title="Varsayılan Klasör URL'sine Sıfırla"
+                      className="px-2.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg text-slate-600 transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end md:self-center">
+                <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 text-[11px] flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>
+                    Son Senkron: <strong>{config.lastSyncTime ? new Date(config.lastSyncTime).toLocaleDateString('tr-TR') : 'Şimdi'}</strong>
+                  </span>
+                </div>
+              </div>
             </div>
+
+            {/* Feedback Alert (Partial) - REMOVED AS MOVED TO COMMON AREA */}
+          </>
+        ) : (
+          <div className="p-4 sm:p-6 bg-slate-50 space-y-4">
+             <div className="flex items-center gap-3 mb-2">
+                <div className="p-2.5 bg-sky-100 text-sky-600 rounded-xl">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900">AI Tarama & İşlem Merkezi</h3>
+                  <p className="text-xs text-slate-500">Tüm Drive belgelerini toplu olarak tarayın, fiyatlandırın ve kataloğunuza ekleyin.</p>
+                </div>
+             </div>
+
+             {/* BATCH PROGRESS BAR (Internal to tab) */}
+             {isBatchScanning && (
+               <div className="p-5 bg-white border border-sky-200 rounded-2xl shadow-sm space-y-3">
+                  <div className="flex items-center justify-between text-sm font-bold text-sky-900">
+                    <span className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-sky-600" />
+                      <span>Sistem Dosyaları İşliyor ({batchProgress.current} / {batchProgress.total})</span>
+                    </span>
+                    <span className="text-sky-700 font-mono text-xs">{batchProgress.filename}</span>
+                  </div>
+                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                    <div
+                      className="h-full bg-sky-600 transition-all duration-500 shadow-[0_0_10px_rgba(2,132,199,0.3)]"
+                      style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-sky-600/80 italic font-medium">
+                    * Taraması tamamlanan her dosyadaki ürünler anlık olarak kataloğunuza eklenmektedir. Beklemenize gerek kalmadan diğer sekmelerde işlem yapabilirsiniz.
+                  </p>
+               </div>
+             )}
+
+             {/* PREVIEW TILE (Last Scanned) - REMOVED AS MOVED TO COMMON AREA */}
+             
+             {!isBatchScanning && (
+                <div className="p-8 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                   <Sparkles className="w-12 h-12 text-sky-200 mx-auto mb-4" />
+                   <h4 className="text-lg font-bold text-slate-800">Toplu İşleme Hazır</h4>
+                   <p className="text-sm text-slate-500 max-w-sm mx-auto mt-2">
+                      Aşağıdaki butona tıklayarak Drive klasöründeki tüm fiyat listelerini AI ile taratıp kataloğunuza anında ekleyebilirsiniz.
+                   </p>
+                </div>
+             )}
           </div>
         )}
 
-        {/* BATCH PROGRESS BAR */}
-        {isBatchScanning && (
-          <div className="px-5 py-4 bg-sky-50 border-y border-sky-100 space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-sky-900">
-              <span className="flex items-center gap-2">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                <span>Yapay zeka dosyaları tarıyor ({batchProgress.current} / {batchProgress.total})</span>
-              </span>
-              <span className="text-sky-700 font-mono text-[11px] truncate max-w-xs">{batchProgress.filename}</span>
-            </div>
-            <div className="w-full h-2 bg-sky-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-sky-600 rounded-full transition-all duration-300"
-                style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ADMIN DECISION PANEL: WHOLESALE VS RETAIL & MARKUP */}
-        {isAdmin && (
+        {/* DRIVE CONFIG AREA (ONLY SHOW IF NOT SCANNING TAB OR MOVE IT) */}
+        {subTab === 'files' && isAdmin && (
           <div className="p-4 sm:p-5 bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
@@ -891,94 +1011,134 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
           </div>
         )}
 
-        {/* PRIMARY ACTIONS FOR MANAGER / OPTICIAN */}
-        <div className="p-4 sm:p-5 border-t border-slate-200 bg-white">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {isAdmin ? (
-                <>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Katalogdaki tüm verileri silmek istediğinize emin misiniz?')) {
-                        onResetToDefaultCatalog();
-                        setStatusMessage({
-                          type: 'success',
-                          message: 'Katalogdaki tüm veriler temizlendi.',
-                        });
-                      }
-                    }}
-                    className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
-                    title="Katalogdaki tüm ürünleri siler"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Kataloğu Temizle (Boşalt)</span>
-                  </button>
+        {/* AI SCAN CONTROLS (Moved here for better separation) */}
+        {subTab === 'scanning' && isAdmin && (
+          <div className="px-4 sm:p-6 bg-slate-50 border-t border-slate-100 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="w-5 h-5 text-sky-600" />
+                  <h3 className="font-bold text-slate-900 text-base">Toplu İşlem Kontrolü</h3>
+                </div>
+                <p className="text-sm text-slate-600">
+                  Klasördeki tüm belgeleri sizin belirlediğiniz kâr marjı ve fiyat kurallarıyla tek seferde tarar.
+                </p>
+                
+                <button
+                  onClick={handleBatchScanAll}
+                  disabled={isBatchScanning}
+                  className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-extrabold transition shadow-lg flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95"
+                >
+                  {isBatchScanning ? (
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-5 h-5" />
+                  )}
+                  <span>Tüm Drive Klasörünü AI ile Tara ({driveFiles.length} Belge)</span>
+                </button>
+              </div>
 
-                  <button
-                    onClick={handleBatchScanAll}
-                    disabled={isBatchScanning}
-                    className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>Tüm Drive Klasörünü AI ile Tara ({driveFiles.length} Belge)</span>
-                  </button>
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <SlidersHorizontal className="w-5 h-5 text-slate-600" />
+                  <h3 className="font-bold text-slate-900 text-base">Fiyatlandırma Kuralları</h3>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600 font-medium">Toptan Liste Kâr Çarpanı:</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={profitMarkup}
+                        onChange={(e) => setProfitMarkup(parseFloat(e.target.value))}
+                        className="w-16 px-2 py-1.5 text-center font-bold bg-slate-50 border border-slate-200 rounded-lg text-sm"
+                      />
+                      <button 
+                        onClick={handleApplyGlobalMarkupToAllWholesale}
+                        className="text-[10px] text-sky-600 font-bold hover:underline"
+                      >
+                        Tümüne Uygula
+                      </button>
+                    </div>
+                  </div>
 
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center gap-2"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Telefondan/Bilgisayardan Belge/Fotoğraf Tara</span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,image/*"
-                    onChange={handleLocalFileUpload}
-                    className="hidden"
-                  />
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Katalogdaki tüm verileri silmek istediğinize emin misiniz?')) {
-                        onResetToDefaultCatalog();
-                        setStatusMessage({
-                          type: 'success',
-                          message: 'Katalogdaki tüm veriler temizlendi.',
-                        });
-                      }
-                    }}
-                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Kataloğu Temizle</span>
-                  </button>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600 font-medium">Fiyat Tespit Modu:</span>
+                    <select
+                      value={adminPriceMode}
+                      onChange={(e) => setAdminPriceMode(e.target.value as any)}
+                      className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5"
+                    >
+                      <option value="auto">Otomatik Algıla</option>
+                      <option value="wholesale">Toptan Alış (Kâr Ekle)</option>
+                      <option value="retail">Perakende Satış (Direkt)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PRIMARY ACTIONS - Wrapped in files tab only */}
+        {subTab === 'files' && (
+          <div className="p-4 sm:p-5 border-t border-slate-200 bg-white">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {isAdmin ? (
+                  <>
+                    <button
+                      onClick={() => setSubTab('scanning')}
+                      className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>Toplu Tarama Paneline Git</span>
+                    </button>
+
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center gap-2"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Dosya/Fotoğraf Tara</span>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,image/*"
+                      onChange={handleLocalFileUpload}
+                      className="hidden"
+                    />
+                  </>
+                ) : (
                   <span className="text-xs text-slate-500">
                     Sistemde yöneticinin Drive klasöründen yüklediği güncel toptan/perakende listesi etkindir.
                   </span>
-                </>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="flex items-center gap-2 self-end">
-              <button
-                onClick={() => exportLensesToExcel(lenses)}
-                className="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5"
-                title="Mevcut kataloğu Excel olarak indir"
-              >
-                <ArrowDownToLine className="w-3.5 h-3.5 text-slate-500" />
-                <span>Excel İndir</span>
-              </button>
+              <div className="flex items-center gap-2 self-end">
+                <button
+                  onClick={() => exportLensesToExcel(lenses)}
+                  className="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5"
+                  title="Mevcut kataloğu Excel olarak indir"
+                >
+                  <ArrowDownToLine className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Excel İndir</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* DRIVE FILES DIRECTORY (19 Files Detected) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+      {/* DRIVE FILES DIRECTORY - Wrapped in files tab */}
+      {subTab === 'files' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
+          {/* ... existing files list ... */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-slate-900">
@@ -1362,38 +1522,48 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                     {file.format === 'pdf' ? 'PDF Belgesi' : 'Görsel (JPG)'}
                   </span>
 
-                  {isAdmin ? (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleScanSingleFile(file)}
-                      disabled={isScanningThis || isBatchScanning}
-                      className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 hover:border-sky-300 rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
+                      onClick={() => setActiveFlipbookFile(file)}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition flex items-center gap-1.5"
                     >
-                      {isScanningThis ? (
-                        <>
-                          <RefreshCw className="w-3 h-3 animate-spin text-sky-600" />
-                          <span>Taranıyor...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3 h-3 text-sky-500" />
-                          <span>AI ile Tara</span>
-                        </>
-                      )}
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>İncele</span>
                     </button>
-                  ) : (
-                    <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                      Entegre Edildi
-                    </span>
-                  )}
+                    {isAdmin ? (
+                      <button
+                        onClick={() => handleScanSingleFile(file)}
+                        disabled={isScanningThis || isBatchScanning}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 hover:border-sky-300 rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isScanningThis ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin text-sky-600" />
+                            <span>Taranıyor...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3 text-sky-500" />
+                            <span>AI ile Tara</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                        Entegre Edildi
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+    )}
 
       {/* ADDITIONAL ADMIN TOOLS: EXCEL & CATALOG MANAGEMENT */}
-      {isAdmin && (
+      {subTab === 'files' && isAdmin && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
@@ -1472,6 +1642,15 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* FLIPBOOK VIEWER MODAL */}
+      {activeFlipbookFile && (
+        <FlipbookViewer
+          pdfUrl={activeFlipbookFile.downloadUrl}
+          title={activeFlipbookFile.name}
+          onClose={() => setActiveFlipbookFile(null)}
+        />
       )}
     </div>
   );
