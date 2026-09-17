@@ -1,0 +1,56 @@
+{
+  "collections": {
+    "catalog": {
+      "id": "string",
+      "brand": "string",
+      "distributor": "string",
+      "name": "string",
+      "productType": "string",
+      "category": "string",
+      "index": "string",
+      "material": "string",
+      "coating": "string",
+      "wholesalePrice": "number",
+      "retailPrice": "number",
+      "currency": "string",
+      "sphRange": "string",
+      "cylMax": "number",
+      "diameter": "string",
+      "baseCurve": "string",
+      "boxContent": "string",
+      "wearPeriod": "string",
+      "lensType": "string",
+      "deliveryType": "string",
+      "notes": "string",
+      "isCustom": "boolean",
+      "sourceFileId": "string",
+      "sourceFileName": "string",
+      "sourceListType": "string",
+      "updatedAt": "string"
+    },
+    "discounts": {
+      "brand": "string",
+      "distributor": "string",
+      "discount1": "number",
+      "discount2": "number",
+      "categoryOverrides": "map"
+    },
+    "customLists": {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "items": "array",
+      "patientName": "string",
+      "targetProfitMargin": "number"
+    },
+    "processedFiles": {
+      "fileId": "string",
+      "fileName": "string",
+      "lastScanTime": "string",
+      "status": "string",
+      "message": "string"
+    }
+  }
+}

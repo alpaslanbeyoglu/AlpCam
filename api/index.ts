@@ -310,7 +310,9 @@ Sadece geçerli bir JSON döndür.`;
         });
 
         const rawText = response.text || '{}';
-        const parsed = JSON.parse(rawText.trim());
+        // Clean potential markdown formatting
+        const cleanRawText = rawText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+        const parsed = JSON.parse(cleanRawText);
         const rawLenses = Array.isArray(parsed) ? parsed : (parsed.lenses || []);
         const fileListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 
           parsed.listType || detectedListType;

@@ -17,6 +17,11 @@ export const BrandDiscountsView: React.FC<BrandDiscountsViewProps> = ({
   availableBrands,
 }) => {
   const [discountList, setDiscountList] = useState<BrandDiscount[]>(discounts);
+
+  React.useEffect(() => {
+    setDiscountList(discounts);
+  }, [discounts]);
+
   const [newBrandName, setNewBrandName] = useState('');
   const [newDiscount1, setNewDiscount1] = useState(40);
   const [newDiscount2, setNewDiscount2] = useState(0);

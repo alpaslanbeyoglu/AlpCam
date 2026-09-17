@@ -9,6 +9,7 @@ import {
 interface CustomListsViewProps {
   customLists: CustomList[];
   onUpdateLists: (lists: CustomList[]) => void;
+  onDeleteList?: (id: string) => void;
   brandDiscounts: BrandDiscount[];
   isCustomerMode: boolean;
   pairCount: 1 | 2;
@@ -18,6 +19,7 @@ interface CustomListsViewProps {
 export const CustomListsView: React.FC<CustomListsViewProps> = ({
   customLists,
   onUpdateLists,
+  onDeleteList,
   brandDiscounts,
   isCustomerMode,
   pairCount,
@@ -26,6 +28,13 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
   const [selectedListId, setSelectedListId] = useState<string>(
     customLists[0]?.id || ''
   );
+
+  useEffect(() => {
+    if (!selectedListId && customLists.length > 0) {
+      setSelectedListId(customLists[0].id);
+    }
+  }, [customLists, selectedListId]);
+
   const [newListName, setNewListName] = useState('');
   const [isCreatingList, setIsCreatingList] = useState(false);
   const [copiedNotice, setCopiedNotice] = useState(false);
@@ -95,10 +104,16 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
       return;
     }
     setListToDelete(null);
-    const next = customLists.filter((l) => l.id !== listId);
-    onUpdateLists(next);
+    if (onDeleteList) {
+      onDeleteList(listId);
+    } else {
+      const next = customLists.filter((l) => l.id !== listId);
+      onUpdateLists(next);
+    }
+    
     if (selectedListId === listId) {
-      setSelectedListId(next[0].id);
+      const remaining = customLists.filter((l) => l.id !== listId);
+      setSelectedListId(remaining[0]?.id || '');
     }
   };
 

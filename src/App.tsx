@@ -54,19 +54,33 @@ import {
   Search,
 } from 'lucide-react';
 
+import { useFirebaseCatalog } from './hooks/useFirebaseCatalog';
+import { useAutoDriveSync } from './hooks/useAutoDriveSync';
+
 export default function App() {
+  const {
+    lenses,
+    discounts: brandDiscounts,
+    customLists,
+    loading: isFirebaseLoading,
+    saveLens,
+    saveLenses,
+    deleteLens,
+    clearCatalog,
+    saveDiscount,
+    saveDiscounts,
+    saveCustomList,
+    saveCustomLists,
+    deleteCustomList,
+  } = useFirebaseCatalog();
+
   // Navigation
   const [activeTab, setActiveTab] = useState<
     'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions'
   >('catalog');
 
-  // Core Data
-  const [lenses, setLenses] = useState<Lens[]>(() => loadStoredLenses());
-  const [brandDiscounts, setBrandDiscounts] = useState<BrandDiscount[]>(() => loadStoredDiscounts());
-  const [customLists, setCustomLists] = useState<CustomList[]>(() => loadStoredCustomLists());
-  const [driveConfig, setDriveConfig] = useState<DriveSyncConfig>(() => loadStoredDriveConfig());
-
   // App Settings
+  const [driveConfig, setDriveConfig] = useState<DriveSyncConfig>(() => loadStoredDriveConfig());
   const [isCustomerMode, setIsCustomerMode] = useState<boolean>(() => loadCustomerMode());
   const [pairCount, setPairCount] = useState<1 | 2>(() => loadPairCount());
 
@@ -74,6 +88,12 @@ export default function App() {
   const [adminPin, setAdminPin] = useState<string>(() => loadAdminPin());
   const [isAdmin, setIsAdmin] = useState<boolean>(() => loadIsAdminSession());
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+
+  // Background Sync
+  const { syncDrive, isSyncing: isAutoSyncing } = useAutoDriveSync(isAdmin, driveConfig, (busy, text) => {
+    setIsDriveWorking(busy);
+    setDriveWorkingText(text);
+  });
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -107,18 +127,6 @@ export default function App() {
 
   // Persistence Effects
   useEffect(() => {
-    saveStoredLenses(lenses);
-  }, [lenses]);
-
-  useEffect(() => {
-    saveStoredDiscounts(brandDiscounts);
-  }, [brandDiscounts]);
-
-  useEffect(() => {
-    saveStoredCustomLists(customLists);
-  }, [customLists]);
-
-  useEffect(() => {
     saveStoredDriveConfig(driveConfig);
   }, [driveConfig]);
 
@@ -136,12 +144,15 @@ export default function App() {
 
   useEffect(() => {
     saveIsAdminSession(isAdmin);
+    if (isAdmin && driveConfig.sourceUrl) {
+      syncDrive(driveConfig.sourceUrl);
+    }
   }, [isAdmin]);
 
   // Auto-sync on startup if enabled
   useEffect(() => {
-    if (driveConfig.autoSyncOnLoad && driveConfig.sourceUrl) {
-      handleDriveAutoSync();
+    if (isAdmin && driveConfig.autoSyncOnLoad && driveConfig.sourceUrl) {
+      syncDrive(driveConfig.sourceUrl);
     }
   }, []);
 
@@ -159,7 +170,7 @@ export default function App() {
       const buffer = await fetchFromDriveUrl(driveConfig.sourceUrl);
       const res = parseExcelOrCsvData(buffer);
       if (res.success && res.lenses.length > 0) {
-        setLenses(res.lenses);
+        await saveLenses(res.lenses, 'replace');
         setDriveConfig((prev) => ({
           ...prev,
           lastSyncTime: new Date().toISOString(),
@@ -257,7 +268,7 @@ export default function App() {
     return Array.from(set).sort((a, b) => parseFloat(a) - parseFloat(b));
   }, [lenses, selectedProductType, selectedDistributor, selectedBrand]);
 
-  const handleBulkPriceIncrease = (percent: number, brandFilter?: string) => {
+  const handleBulkPriceIncrease = async (percent: number, brandFilter?: string) => {
     const multiplier = 1 + percent / 100;
     const updated = lenses.map((l) => {
       if (brandFilter && brandFilter !== 'all' && l.brand.toLowerCase() !== brandFilter.toLowerCase()) {
@@ -269,7 +280,8 @@ export default function App() {
         retailPrice: Math.round(((l.retailPrice || 0) * multiplier) * 100) / 100,
       };
     });
-    setLenses(updated);
+    
+    await saveLenses(updated, 'merge');
     showToast(`Katalog fiyatlarına %${percent} oranında toplu zam uygulandı (${updated.length} ürün).`);
   };
 
@@ -459,7 +471,7 @@ export default function App() {
   ]);
 
   // Add to active custom list
-  const handleAddToList = (lens: Lens, targetListId?: string, customPrice?: number) => {
+  const handleAddToList = async (lens: Lens, targetListId?: string, customPrice?: number) => {
     let listId = targetListId;
     let currentLists = [...customLists];
 
@@ -477,31 +489,29 @@ export default function App() {
       listId = currentLists[0].id;
     }
 
-    const updatedLists = currentLists.map((list) => {
-      if (list.id === listId) {
-        const newItem = {
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          lensId: lens.id,
-          lensSnapshot: lens,
-          quantity: pairCount,
-          customRetailPrice: customPrice,
-        };
-        return {
-          ...list,
-          items: [...list.items, newItem],
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return list;
-    });
-
-    setCustomLists(updatedLists);
-    showToast(`"${lens.name}" listeye eklendi`);
+    const listToUpdate = currentLists.find(l => l.id === listId);
+    if (listToUpdate) {
+      const newItem = {
+        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        lensId: lens.id,
+        lensSnapshot: lens,
+        quantity: pairCount,
+        customRetailPrice: customPrice,
+      };
+      const updatedList = {
+        ...listToUpdate,
+        items: [...listToUpdate.items, newItem],
+        updatedAt: new Date().toISOString(),
+      };
+      await saveCustomList(updatedList);
+      showToast(`"${lens.name}" listeye eklendi`);
+    }
   };
 
-  const handleUpdateLenses = (newLenses: Lens[], mode: 'replace' | 'merge') => {
+  const handleUpdateLenses = async (newLenses: Lens[], mode: 'replace' | 'merge') => {
     if (mode === 'replace') {
-      setLenses(newLenses);
+      await clearCatalog();
+      await saveLenses(newLenses, 'replace');
     } else {
       // Merge unique by name, but update prices if TFL/PFL lists are mixed
       const mergedMap = new Map<string, Lens>();
@@ -534,36 +544,38 @@ export default function App() {
         }
       });
 
-      setLenses(Array.from(mergedMap.values()));
+      await saveLenses(Array.from(mergedMap.values()), 'merge');
     }
   };
 
-  const handleResetCatalog = () => {
-    setLenses([]);
+  const handleResetCatalog = async () => {
+    await clearCatalog();
     showToast('Katalogdaki tüm veriler başarıyla temizlendi');
   };
 
-  const handleUpdateLens = (updatedLens: Lens) => {
-    setLenses((prev) => prev.map((l) => (l.id === updatedLens.id ? updatedLens : l)));
+  const handleUpdateLens = async (updatedLens: Lens) => {
+    await saveLens(updatedLens);
     setDetailLens(updatedLens);
     showToast(`"${updatedLens.name}" özellikleri başarıyla güncellendi.`);
   };
 
-  const handleDeleteLens = (lensId: string) => {
-    setLenses((prev) => prev.filter((l) => l.id !== lensId));
+  const handleDeleteLens = async (lensId: string) => {
+    await deleteLens(lensId);
     showToast('Ürün katalogdan başarıyla kaldırıldı.');
   };
 
-  const handleDeleteBrand = (brandName: string) => {
+  const handleDeleteBrand = async (brandName: string) => {
     const brandLower = brandName.trim().toLowerCase();
-    setLenses((prev) => prev.filter((l) => l.brand.trim().toLowerCase() !== brandLower));
+    const toDelete = lenses.filter((l) => l.brand.trim().toLowerCase() === brandLower);
+    await Promise.all(toDelete.map(l => deleteLens(l.id)));
     setSelectedBrand('all');
     showToast(`"${brandName}" markası ve tüm ürünleri silindi.`);
   };
 
-  const handleDeleteDistributor = (distributorName: string) => {
+  const handleDeleteDistributor = async (distributorName: string) => {
     const distLower = distributorName.trim().toLowerCase();
-    setLenses((prev) => prev.filter((l) => (l.distributor || '').trim().toLowerCase() !== distLower));
+    const toDelete = lenses.filter((l) => (l.distributor || '').trim().toLowerCase() === distLower);
+    await Promise.all(toDelete.map(l => deleteLens(l.id)));
     setSelectedDistributor('all');
     showToast(`"${distributorName}" firması ve tüm ürünleri silindi.`);
   };
@@ -769,7 +781,8 @@ export default function App() {
         <div className={activeTab === 'custom_lists' ? 'block' : 'hidden'}>
           <CustomListsView
             customLists={customLists}
-            onUpdateLists={setCustomLists}
+            onUpdateLists={saveCustomLists}
+            onDeleteList={deleteCustomList}
             brandDiscounts={brandDiscounts}
             isCustomerMode={isCustomerMode}
             pairCount={pairCount}
@@ -781,7 +794,7 @@ export default function App() {
         <div className={activeTab === 'discounts' ? 'block' : 'hidden'}>
           <BrandDiscountsView
             discounts={brandDiscounts}
-            onSaveDiscounts={setBrandDiscounts}
+            onSaveDiscounts={saveDiscounts}
             availableBrands={availableBrands}
           />
         </div>
@@ -837,8 +850,8 @@ export default function App() {
       <AddLensModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onAddLens={(newLens) => {
-          setLenses([newLens, ...lenses]);
+        onAddLens={async (newLens) => {
+          await saveLens(newLens);
           showToast(`"${newLens.name}" kataloğa eklendi`);
         }}
         existingBrands={availableBrands}
