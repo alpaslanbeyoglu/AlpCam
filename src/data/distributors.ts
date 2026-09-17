@@ -436,18 +436,21 @@ export function getDistributorForBrand(
   return brandName || 'Genel Dağıtım';
 }
 
+import { loadStoredDistributors } from '../utils/storage';
+
 /**
- * Dağıtıcı adına göre meta bilgisini çeker
+ * Dağıtıcı adına göre meta bilgisini çeker (dinamik depolama destekli)
  */
 export function getDistributorInfo(distName?: string): DistributorInfo | undefined {
   if (!distName) return undefined;
+  const list = loadStoredDistributors();
   const lower = distName.toLowerCase();
-  return DISTRIBUTORS_LIST.find(
+  return list.find(
     (d) =>
       d.name.toLowerCase() === lower ||
-      d.shortName.toLowerCase() === lower ||
+      d.shortName?.toLowerCase() === lower ||
       d.id.toLowerCase() === lower ||
-      lower.includes(d.shortName.toLowerCase()) ||
-      d.brands.some((b) => b.toLowerCase() === lower)
+      (d.shortName && lower.includes(d.shortName.toLowerCase())) ||
+      d.brands.some((b) => b.toLowerCase() === lower || lower.includes(b.toLowerCase()))
   );
 }

@@ -38,6 +38,7 @@ import { LensDetailModal } from './components/LensDetailModal';
 import { BrandDiscountsView } from './components/BrandDiscountsView';
 import { CustomListsView } from './components/CustomListsView';
 import { DriveSyncView } from './components/DriveSyncView';
+import { DefinitionsView } from './components/DefinitionsView';
 import { AddLensModal } from './components/AddLensModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { useExchangeRates } from './hooks/useExchangeRates';
@@ -56,7 +57,7 @@ import {
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<
-    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync'
+    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions'
   >('catalog');
 
   // Core Data
@@ -255,6 +256,22 @@ export default function App() {
     });
     return Array.from(set).sort((a, b) => parseFloat(a) - parseFloat(b));
   }, [lenses, selectedProductType, selectedDistributor, selectedBrand]);
+
+  const handleBulkPriceIncrease = (percent: number, brandFilter?: string) => {
+    const multiplier = 1 + percent / 100;
+    const updated = lenses.map((l) => {
+      if (brandFilter && brandFilter !== 'all' && l.brand.toLowerCase() !== brandFilter.toLowerCase()) {
+        return l;
+      }
+      return {
+        ...l,
+        wholesalePrice: Math.round(((l.wholesalePrice || 0) * multiplier) * 100) / 100,
+        retailPrice: Math.round(((l.retailPrice || 0) * multiplier) * 100) / 100,
+      };
+    });
+    setLenses(updated);
+    showToast(`Katalog fiyatlarına %${percent} oranında toplu zam uygulandı (${updated.length} ürün).`);
+  };
 
   const handleProductTypeChange = (val: 'all' | 'eyeglass_lens' | 'contact_lens') => {
     setSelectedProductType(val);
@@ -526,6 +543,12 @@ export default function App() {
     showToast('Katalogdaki tüm veriler başarıyla temizlendi');
   };
 
+  const handleUpdateLens = (updatedLens: Lens) => {
+    setLenses((prev) => prev.map((l) => (l.id === updatedLens.id ? updatedLens : l)));
+    setDetailLens(updatedLens);
+    showToast(`"${updatedLens.name}" özellikleri başarıyla güncellendi.`);
+  };
+
   const handleDeleteLens = (lensId: string) => {
     setLenses((prev) => prev.filter((l) => l.id !== lensId));
     showToast('Ürün katalogdan başarıyla kaldırıldı.');
@@ -651,6 +674,7 @@ export default function App() {
             isAdmin={isAdmin}
             onDeleteBrand={handleDeleteBrand}
             onDeleteDistributor={handleDeleteDistributor}
+            onBulkPriceIncrease={handleBulkPriceIncrease}
           />
 
           {/* Results Grid / List */}
@@ -779,6 +803,11 @@ export default function App() {
           />
         </div>
 
+        {/* TAB 5: ADMIN DEFINITIONS (FIRMS, BRANDS, HIERARCHY) */}
+        <div className={activeTab === 'definitions' ? 'block' : 'hidden'}>
+          <DefinitionsView isAdmin={isAdmin} showToast={showToast} />
+        </div>
+
       </main>
 
       {/* Footer */}
@@ -800,6 +829,7 @@ export default function App() {
           }}
           isAdmin={isAdmin}
           onDeleteLens={handleDeleteLens}
+          onUpdateLens={handleUpdateLens}
         />
       )}
 

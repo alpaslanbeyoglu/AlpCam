@@ -1,9 +1,9 @@
 import React from 'react';
-import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck, Building2 } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync';
-  setActiveTab: (tab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync') => void;
+  activeTab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions';
+  setActiveTab: (tab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions') => void;
   isCustomerMode: boolean;
   setIsCustomerMode: (val: boolean) => void;
   pairCount: 1 | 2;
@@ -248,6 +248,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
           {!isDriveWorking && !isAdmin && <Lock className="w-2.5 h-2.5 text-amber-600 shrink-0" />}
         </button>
+
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('definitions')}
+            className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
+              activeTab === 'definitions'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-indigo-700 hover:bg-indigo-50 border border-indigo-200/80 bg-indigo-50/50'
+            }`}
+          >
+            <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span>Tanımlar (Firmalar)</span>
+          </button>
+        )}
 
       </nav>
     </header>

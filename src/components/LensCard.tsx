@@ -71,14 +71,27 @@ export const LensCard: React.FC<LensCardProps> = ({
   };
 
   const isContact = lens.productType === 'contact_lens';
+  const isCampaign = lens.sourceListType === 'kampanya' || lens.notes?.toLowerCase().includes('kampanya') || lens.name.toLowerCase().includes('kampanya');
   const distributorName = lens.distributor || getDistributorForBrand(lens.brand, lens.name);
   const distributorInfo = distributorName ? getDistributorInfo(distributorName) : undefined;
 
   return (
     <div
       id={`lens-card-${lens.id}`}
-      className="bg-white rounded-2xl border border-slate-200 hover:border-sky-300 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between group"
+      className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between group ${
+        isCampaign
+          ? 'border-amber-400 bg-amber-50/10 shadow-md ring-2 ring-amber-400/20'
+          : 'border-slate-200 hover:border-sky-300 shadow-xs hover:shadow-md'
+      }`}
     >
+      {/* Campaign Banner if campaign product */}
+      {isCampaign && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-3 py-1 flex items-center justify-between">
+          <span className="flex items-center gap-1">🔥 Kampanyalı Ürün</span>
+          <span className="bg-black/20 px-1.5 py-0.5 rounded text-[9px]">Kampanya: 01.09.2026 - 31.10.2026</span>
+        </div>
+      )}
+
       {/* Top Header info */}
       <div className="p-3.5 sm:p-4 space-y-2">
         <div className="flex items-start justify-between gap-2">
@@ -252,13 +265,22 @@ export const LensCard: React.FC<LensCardProps> = ({
                   <span>Toptan Alış</span>
                   <span className="text-sky-600 font-bold">-%{fin.effectiveDiscountRate}</span>
                 </div>
-                <div className="mt-0.5 flex items-baseline gap-1.5">
-                  <span className="text-base font-extrabold text-slate-800">
-                    {formatCurrency(fin.netWholesaleCost, lens.currency)}
-                  </span>
-                  <span className="text-[11px] text-slate-400 line-through">
-                    {formatCurrency(fin.wholesaleListPrice, lens.currency)}
-                  </span>
+                <div className="mt-0.5 flex flex-col">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-base font-extrabold text-slate-800">
+                      {lens.currency === 'EUR'
+                        ? `${formatCurrency(lens.wholesalePrice, 'EUR')} (€)`
+                        : formatCurrency(fin.netWholesaleCost, lens.currency)}
+                    </span>
+                    <span className="text-[11px] text-slate-400 line-through">
+                      {formatCurrency(fin.wholesaleListPrice, lens.currency)}
+                    </span>
+                  </div>
+                  {lens.currency === 'EUR' && (
+                    <span className="text-[10px] text-indigo-600 font-semibold">
+                      Canlı Karşılığı: ~ {formatCurrency(fin.netWholesaleCost, 'TRY')}
+                    </span>
+                  )}
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">
                   {isContact

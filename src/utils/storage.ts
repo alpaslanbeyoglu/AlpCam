@@ -2,6 +2,7 @@ import { Lens, BrandDiscount, CustomList, DriveSyncConfig } from '../types';
 import { INITIAL_LENSES } from '../data/initialLenses';
 import { INITIAL_DISCOUNTS } from '../data/initialDiscounts';
 import { sanitizeLens, normalizeBrandName } from './pricing';
+import { DistributorInfo, DISTRIBUTORS_LIST } from '../data/distributors';
 
 const KEYS = {
   LENSES: 'optik_lenses_v1',
@@ -12,6 +13,7 @@ const KEYS = {
   PAIR_SELECTION: 'optik_pair_count_v1',
   ADMIN_PIN: 'optik_admin_pin_v1',
   IS_ADMIN: 'optik_is_admin_session_v1',
+  DISTRIBUTORS: 'optik_distributors_v1',
 };
 
 const DEFAULT_ADMIN_PIN = '1923';
@@ -186,5 +188,29 @@ export function savePairCount(pairCount: 1 | 2): void {
     localStorage.setItem(KEYS.PAIR_SELECTION, String(pairCount));
   } catch (err) {
     console.error('Failed to save pair count:', err);
+  }
+}
+
+export function loadStoredDistributors(): DistributorInfo[] {
+  try {
+    const raw = localStorage.getItem(KEYS.DISTRIBUTORS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load distributors from storage:', err);
+  }
+  // Return the default initial distributors list if empty
+  return DISTRIBUTORS_LIST;
+}
+
+export function saveStoredDistributors(distributors: DistributorInfo[]): void {
+  try {
+    localStorage.setItem(KEYS.DISTRIBUTORS, JSON.stringify(distributors));
+  } catch (err) {
+    console.error('Failed to save distributors to storage:', err);
   }
 }

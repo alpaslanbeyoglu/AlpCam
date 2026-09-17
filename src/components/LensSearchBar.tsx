@@ -37,6 +37,7 @@ interface LensSearchBarProps {
   isAdmin?: boolean;
   onDeleteBrand?: (brand: string) => void;
   onDeleteDistributor?: (distributor: string) => void;
+  onBulkPriceIncrease?: (percent: number, brand?: string) => void;
 }
 
 const EYEGLASS_CATEGORIES: { id: string; label: string }[] = [
@@ -93,6 +94,7 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
   isAdmin,
   onDeleteBrand,
   onDeleteDistributor,
+  onBulkPriceIncrease,
 }) => {
   const hasActiveFilters =
     searchTerm !== '' ||
@@ -238,6 +240,27 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             </button>
           )}
         </div>
+
+        {/* Bulk Price Increase Button for Admin */}
+        {isAdmin && onBulkPriceIncrease && (
+          <button
+            onClick={() => {
+              const pctStr = prompt('Katalog fiyatlarına uygulanacak toplu zam yüzdesini girin (Örn: 10 veya 15):', '10');
+              if (pctStr !== null) {
+                const pct = parseFloat(pctStr);
+                if (!isNaN(pct)) {
+                  onBulkPriceIncrease(pct, selectedBrand);
+                } else {
+                  alert('Geçerli bir sayı girmelisiniz.');
+                }
+              }
+            }}
+            className="px-2.5 py-1 sm:py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center gap-1 transition shadow-2xs"
+            title="Katalog fiyatlarına toplu zam uygula"
+          >
+            <span>📈 Toplu Zam</span>
+          </button>
+        )}
 
         {/* Advanced Filter Toggle */}
         <button

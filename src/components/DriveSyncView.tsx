@@ -586,51 +586,6 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
           </div>
         )}
 
-        {/* LIVE SYSTEM MEMORY STATUS & BULK LOAD BAR */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl shadow-md space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <Database className="w-4 h-4" />
-                </span>
-                <h3 className="text-sm font-bold text-white tracking-wide">
-                  Sistem Belleği Durumu (Aktif Katalog)
-                </h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold">
-                  Bellekte {lenses.length} Ürün Aktif
-                </span>
-              </div>
-              <p className="text-xs text-slate-300">
-                Tüm liste dosyalarındaki gözlük camları ve kontakt lensler ayrıştırılarak sistem belleğinde saklanır.
-              </p>
-            </div>
-
-            {/* Counts breakdown */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 flex items-center gap-2">
-                <span className="text-xs text-slate-300">👓 Gözlük Camı:</span>
-                <span className="text-sm font-bold text-white">{memoryEyeglassCount} Adet</span>
-              </div>
-              <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 flex items-center gap-2">
-                <span className="text-xs text-slate-300">👁️ Kontakt Lens:</span>
-                <span className="text-sm font-bold text-white">{memoryContactCount} Adet</span>
-              </div>
-
-              {isAdmin && (
-                <button
-                  onClick={handleLoadAllProductsIntoMemory}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
-                  title="Drive listelerindeki tüm cam ve kontakt lensleri doğrudan sistem belleğine aktarır"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-white" />
-                  <span>Tüm Ürünleri Sistem Belleğine Yükle ({DRIVE_EXTRACTED_LENSES.length} Ürün)</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* ADMIN DECISION PANEL: WHOLESALE VS RETAIL & MARKUP */}
         {isAdmin && (
           <div className="p-4 sm:p-5 bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-3">
