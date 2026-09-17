@@ -147,10 +147,22 @@ async function analyzeBufferWithGemini(
   brandHint?: string,
   priceMode: 'wholesale' | 'retail' | 'auto' = 'auto',
   profitMarkup: number = 2.0,
-  productTypeHint: 'eyeglass_lens' | 'contact_lens' | 'auto' = 'auto'
+  productTypeHint: 'auto' | 'eyeglass_lens' | 'contact_lens' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+  const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+
+  // Ensure mimeType is compatible with Gemini
+  let finalMimeType = mimeType;
+  if (fileName.toLowerCase().endsWith('.pdf')) finalMimeType = 'application/pdf';
+  else if (fileName.toLowerCase().endsWith('.png')) finalMimeType = 'image/png';
+  else if (fileName.toLowerCase().endsWith('.webp')) finalMimeType = 'image/webp';
+  else if (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg')) finalMimeType = 'image/jpeg';
+  
+  // Fallback if still ambiguous
+  if (!finalMimeType || finalMimeType === 'application/octet-stream') {
+    finalMimeType = fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
+  }
 
   let adminInstruction = '';
   let detectedListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
@@ -275,7 +287,7 @@ Sadece geçerli bir JSON döndür.`;
           contents: [
             {
               inlineData: {
-                mimeType: mimeType.includes('pdf') ? 'application/pdf' : 'image/jpeg',
+                mimeType: finalMimeType,
                 data: b64,
               },
             },

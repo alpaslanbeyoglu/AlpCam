@@ -277,6 +277,16 @@ export function getDistributorForBrand(
   const name = (lensName || '').toLowerCase().trim();
   const combined = `${brand} ${name}`;
 
+  // 0. Check dynamic distributors from storage/definitions first
+  const storedDistributors = loadStoredDistributors();
+  const matchedStored = storedDistributors.find(d => 
+    d.brands.some(b => {
+      const bLow = b.toLowerCase();
+      return brand === bLow || name.includes(bLow) || combined.includes(bLow);
+    })
+  );
+  if (matchedStored) return matchedStored.name;
+
   // 1. Lens Medikal (Bausch + Lomb, PureVision, Ultra, SofLens, Biotrue)
   if (
     brand.includes('lens medikal') ||

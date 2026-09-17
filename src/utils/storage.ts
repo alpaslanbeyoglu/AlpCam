@@ -196,14 +196,14 @@ export function loadStoredDistributors(): DistributorInfo[] {
     const raw = localStorage.getItem(KEYS.DISTRIBUTORS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (err) {
     console.error('Failed to load distributors from storage:', err);
   }
-  // Return the default initial distributors list if empty
+  // Return the default initial distributors list if empty or never saved
   return DISTRIBUTORS_LIST;
 }
 
