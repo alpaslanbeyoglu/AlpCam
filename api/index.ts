@@ -150,7 +150,15 @@ async function analyzeBufferWithGemini(
   productTypeHint: 'auto' | 'eyeglass_lens' | 'contact_lens' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
-  const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-flash-latest'];
+  const modelsToTry = [
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite', 
+    'gemini-3.1-flash-lite',
+    'gemini-3.8-flash', 
+    'gemini-flash-latest', 
+    'gemini-2.0-flash-lite-preview-02-05',
+    'gemini-1.5-flash'
+  ];
 
   // Ensure mimeType is compatible with Gemini
   let finalMimeType = mimeType;
@@ -401,6 +409,12 @@ Sadece geçerli bir JSON döndür.`;
         
         // Wait and retry if it's a 503 or 429
         if (err?.status === 503 || err?.message?.includes('503') || err?.status === 429 || err?.message?.includes('429')) {
+          // If it's a daily quota limit, don't bother retrying this specific model, move to next
+          if (err?.message?.includes('GenerateRequestsPerDay') || err?.message?.includes('quota')) {
+            console.warn(`[Gemini] Model ${modelName} daily quota exceeded. Skipping to next model...`);
+            break; 
+          }
+
           retries--;
           if (retries >= 0) {
             const waitTime = (err?.status === 429 || err?.message?.includes('429')) ? 30000 : 10000;
