@@ -326,34 +326,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
         type: 'success',
         message: `Toplu tarama tamamlandı! Toplam ${accumulatedLenses.length} ürün tespit edildi.`,
       });
-    } else {
-      setStatusMessage({
-        type: 'info',
-        message:
-          'Tüm Drive listelerindeki ürünleri anında sistem belleğine yüklemek için aşağıdaki yeşil butonu kullanabilirsiniz.',
-      });
     }
-  };
-
-  // LOAD ALL PRODUCTS INTO SYSTEM MEMORY (Both eyeglass lenses & contact lenses)
-  const handleLoadAllProductsIntoMemory = () => {
-    onUpdateLenses(DRIVE_EXTRACTED_LENSES, 'replace');
-    const updatedCfg: DriveSyncConfig = {
-      ...config,
-      sourceUrl: folderUrl,
-      lastSyncTime: new Date().toISOString(),
-      lastSyncItemCount: DRIVE_EXTRACTED_LENSES.length,
-    };
-    onSaveConfig(updatedCfg);
-    setPreviewLenses(null);
-
-    const eyeglassLen = DRIVE_EXTRACTED_LENSES.filter((l) => !isContactLens(l)).length;
-    const contactLen = DRIVE_EXTRACTED_LENSES.filter((l) => isContactLens(l)).length;
-
-    setStatusMessage({
-      type: 'success',
-      message: `Tüm listelerdeki ürünler sistem belleğine başarıyla yüklendi! (${eyeglassLen} Gözlük Camı, ${contactLen} Kontakt Lens — Toplam ${DRIVE_EXTRACTED_LENSES.length} Ürün).`,
-    });
   };
 
   // Apply previewed lenses to actual catalog
@@ -805,7 +778,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                   className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Sistem Belleğine Ekle (Merge)</span>
+                  <span>Kataloğa Ekle (Mevcut Verilerle Birleştir)</span>
                 </button>
                 <button
                   onClick={() => handleApplyPreviewLenses('replace')}
@@ -925,12 +898,20 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
               {isAdmin ? (
                 <>
                   <button
-                    onClick={handleLoadAllProductsIntoMemory}
-                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
-                    title="19 Drive belgesindeki tüm cam ve kontakt lensleri doğrudan sistem belleğine aktarır"
+                    onClick={() => {
+                      if (window.confirm('Katalogdaki tüm verileri silmek istediğinize emin misiniz?')) {
+                        onResetToDefaultCatalog();
+                        setStatusMessage({
+                          type: 'success',
+                          message: 'Katalogdaki tüm veriler temizlendi.',
+                        });
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
+                    title="Katalogdaki tüm ürünleri siler"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Tüm Ürünleri Sistem Belleğine Yükle (Cam + Kontakt Lens)</span>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Kataloğu Temizle (Boşalt)</span>
                   </button>
 
                   <button
@@ -960,11 +941,19 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
               ) : (
                 <>
                   <button
-                    onClick={handleLoadAllProductsIntoMemory}
-                    className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
+                    onClick={() => {
+                      if (window.confirm('Katalogdaki tüm verileri silmek istediğinize emin misiniz?')) {
+                        onResetToDefaultCatalog();
+                        setStatusMessage({
+                          type: 'success',
+                          message: 'Katalogdaki tüm veriler temizlendi.',
+                        });
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
                   >
-                    <RefreshCw className="w-4 h-4" />
-                    <span>Yöneticinin Drive Listesinden Kataloğu Belleğe Al</span>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Kataloğu Temizle</span>
                   </button>
                   <span className="text-xs text-slate-500">
                     Sistemde yöneticinin Drive klasöründen yüklediği güncel toptan/perakende listesi etkindir.
