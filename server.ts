@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 
 const PORT = 3000;
@@ -9,15 +8,23 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Initialize Gemini client strictly with server-side API key and User-Agent telemetry
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
-});
+let _aiClient: GoogleGenAI | null = null;
+function getAiClient(): GoogleGenAI {
+  if (!_aiClient) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY ortam değişkeni bulunamadı. Lütfen Vercel ayarlarından ekleyin.');
+    }
+    _aiClient = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+  }
+  return _aiClient;
+}
 
 const DEFAULT_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1Euefi9y_ngCtzEVcOs4mi2cJZKHZ-SBB?usp=sharing';
 
@@ -262,7 +269,8 @@ Sadece geçerli bir JSON döndür.`;
     while (retries >= 0) {
       try {
         console.log(`[Gemini] Scanning ${fileName} with model ${modelName} (priceMode: ${priceMode})...`);
-        const response = await ai.models.generateContent({
+        const aiClient = getAiClient();
+        const response = await aiClient.models.generateContent({
           model: modelName,
           contents: [
             {
@@ -570,6 +578,7 @@ app.post('/api/drive/upload-scan', async (req, res) => {
 // Start Express server and mount Vite middleware
 async function start() {
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
