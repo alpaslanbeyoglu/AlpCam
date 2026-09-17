@@ -82,13 +82,25 @@ export const BrandDiscountsView: React.FC<BrandDiscountsViewProps> = ({
     setDiscountList(discounts);
   }, [discounts]);
 
+  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+
   const handleResetDefaults = () => {
-    if (window.confirm('Tüm marka iskontolarını temizlemek istiyor musunuz?')) {
-      setDiscountList([]);
-      onSaveDiscounts([]);
-      triggerSaved();
+    if (!showResetConfirm) {
+      setShowResetConfirm(true);
+      return;
     }
+    setShowResetConfirm(false);
+    setDiscountList([]);
+    onSaveDiscounts([]);
+    triggerSaved();
   };
+
+  React.useEffect(() => {
+    if (showResetConfirm) {
+      const timer = setTimeout(() => setShowResetConfirm(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showResetConfirm]);
 
   const triggerSaved = () => {
     setIsSavedNotice(true);
@@ -145,10 +157,14 @@ export const BrandDiscountsView: React.FC<BrandDiscountsViewProps> = ({
             )}
             <button
               onClick={handleResetDefaults}
-              className="text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition"
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 transition ${
+                showResetConfirm
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
+              }`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Varsayılana Dön</span>
+              <span>{showResetConfirm ? 'Emin misiniz? (Evet, Sıfırla)' : 'Tüm İskontoları Temizle'}</span>
             </button>
           </div>
         </div>

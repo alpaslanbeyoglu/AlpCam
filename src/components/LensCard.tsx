@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers, Eye, Glasses, Package, Building2 } from 'lucide-react';
+import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers, Eye, Glasses, Package, Building2, Trash2 } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 
 interface LensCardProps {
@@ -12,6 +12,8 @@ interface LensCardProps {
   onOpenDetails: (lens: Lens) => void;
   onAddToList: (lens: Lens) => void;
   isAddedToActiveList?: boolean;
+  isAdmin?: boolean;
+  onDeleteLens?: (lensId: string) => void;
 }
 
 const BRAND_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -48,8 +50,19 @@ export const LensCard: React.FC<LensCardProps> = ({
   onOpenDetails,
   onAddToList,
   isAddedToActiveList,
+  isAdmin,
+  onDeleteLens,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+
+  React.useEffect(() => {
+    if (showDeleteConfirm) {
+      const timer = setTimeout(() => setShowDeleteConfirm(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showDeleteConfirm]);
+
   const brandKey = lens.brand.trim().toLowerCase();
   const brandStyle = BRAND_COLORS[brandKey] || {
     bg: 'bg-slate-100',
@@ -307,6 +320,28 @@ export const LensCard: React.FC<LensCardProps> = ({
           >
             <Info className="w-4 h-4" />
           </button>
+
+          {isAdmin && onDeleteLens && (
+            <button
+              onClick={() => {
+                if (!showDeleteConfirm) {
+                  setShowDeleteConfirm(true);
+                  return;
+                }
+                setShowDeleteConfirm(false);
+                onDeleteLens(lens.id);
+              }}
+              className={`p-2 rounded-xl border transition duration-150 flex items-center justify-center gap-1 ${
+                showDeleteConfirm
+                  ? 'border-rose-400 bg-rose-600 text-white animate-pulse px-3'
+                  : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+              }`}
+              title={showDeleteConfirm ? 'Silmek için tekrar tıklayın' : 'Katalogdan Sil'}
+            >
+              <Trash2 className="w-4 h-4" />
+              {showDeleteConfirm && <span className="text-[10px] font-bold">Emin misiniz?</span>}
+            </button>
+          )}
         </div>
       </div>
     </div>

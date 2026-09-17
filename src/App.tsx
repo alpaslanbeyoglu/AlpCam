@@ -526,6 +526,25 @@ export default function App() {
     showToast('Katalogdaki tüm veriler başarıyla temizlendi');
   };
 
+  const handleDeleteLens = (lensId: string) => {
+    setLenses((prev) => prev.filter((l) => l.id !== lensId));
+    showToast('Ürün katalogdan başarıyla kaldırıldı.');
+  };
+
+  const handleDeleteBrand = (brandName: string) => {
+    const brandLower = brandName.trim().toLowerCase();
+    setLenses((prev) => prev.filter((l) => l.brand.trim().toLowerCase() !== brandLower));
+    setSelectedBrand('all');
+    showToast(`"${brandName}" markası ve tüm ürünleri silindi.`);
+  };
+
+  const handleDeleteDistributor = (distributorName: string) => {
+    const distLower = distributorName.trim().toLowerCase();
+    setLenses((prev) => prev.filter((l) => (l.distributor || '').trim().toLowerCase() !== distLower));
+    setSelectedDistributor('all');
+    showToast(`"${distributorName}" firması ve tüm ürünleri silindi.`);
+  };
+
   const activeList = customLists[0];
   const isLensInActiveList = (lensId: string) => {
     return activeList?.items.some((i) => i.lensId === lensId) || false;
@@ -629,6 +648,9 @@ export default function App() {
             setCylCheck={setCylCheck}
             totalMatches={filteredLenses.length}
             onResetFilters={resetFilters}
+            isAdmin={isAdmin}
+            onDeleteBrand={handleDeleteBrand}
+            onDeleteDistributor={handleDeleteDistributor}
           />
 
           {/* Results Grid / List */}
@@ -664,6 +686,8 @@ export default function App() {
                     onOpenDetails={(l) => setDetailLens(l)}
                     onAddToList={(l) => handleAddToList(l)}
                     isAddedToActiveList={isLensInActiveList(lens.id)}
+                    isAdmin={isAdmin}
+                    onDeleteLens={handleDeleteLens}
                   />
                 ))}
               </div>
@@ -681,6 +705,8 @@ export default function App() {
                       onOpenDetails={(l) => setDetailLens(l)}
                       onAddToList={(l) => handleAddToList(l)}
                       isAddedToActiveList={isLensInActiveList(lens.id)}
+                      isAdmin={isAdmin}
+                      onDeleteLens={handleDeleteLens}
                     />
                   ))}
                 </div>
@@ -772,6 +798,8 @@ export default function App() {
           onAddToList={(lens, listId, customPrice) => {
             handleAddToList(lens, listId, customPrice);
           }}
+          isAdmin={isAdmin}
+          onDeleteLens={handleDeleteLens}
         />
       )}
 

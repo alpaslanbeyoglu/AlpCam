@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink } from 'lucide-react';
+import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2 } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 
 interface LensDetailModalProps {
@@ -12,6 +12,8 @@ interface LensDetailModalProps {
   isCustomerMode: boolean;
   customLists: CustomList[];
   onAddToList: (lens: Lens, listId: string, customPrice?: number) => void;
+  isAdmin?: boolean;
+  onDeleteLens?: (lensId: string) => void;
 }
 
 export const LensDetailModal: React.FC<LensDetailModalProps> = ({
@@ -22,6 +24,8 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
   isCustomerMode,
   customLists,
   onAddToList,
+  isAdmin,
+  onDeleteLens,
 }) => {
   if (!lens) return null;
 
@@ -30,6 +34,14 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
   );
   const [customPriceInput, setCustomPriceInput] = useState<string>('');
   const [addedSuccess, setAddedSuccess] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  React.useEffect(() => {
+    if (showDeleteConfirm) {
+      const timer = setTimeout(() => setShowDeleteConfirm(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showDeleteConfirm]);
 
   const customPrice = customPriceInput ? parseFloat(customPriceInput) : undefined;
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount, customPrice);
@@ -368,6 +380,29 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                   </>
                 )}
               </button>
+
+              {isAdmin && onDeleteLens && (
+                <button
+                  onClick={() => {
+                    if (!showDeleteConfirm) {
+                      setShowDeleteConfirm(true);
+                      return;
+                    }
+                    setShowDeleteConfirm(false);
+                    onDeleteLens(lens.id);
+                    onClose();
+                  }}
+                  className={`py-2 px-3 border rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                    showDeleteConfirm
+                      ? 'border-rose-400 bg-rose-600 text-white animate-pulse'
+                      : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                  }`}
+                  title={showDeleteConfirm ? 'Silmek için tekrar tıklayın' : 'Katalogdan Sil'}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>{showDeleteConfirm ? 'Emin misiniz?' : 'Katalogdan Sil'}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

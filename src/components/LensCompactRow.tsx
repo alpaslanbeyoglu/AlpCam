@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lens, BrandDiscount } from '../types';
 import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
-import { Plus, Check, Info, Eye, Glasses } from 'lucide-react';
+import { Plus, Check, Info, Eye, Glasses, Trash2 } from 'lucide-react';
 
 interface LensCompactRowProps {
   lens: Lens;
@@ -11,6 +11,8 @@ interface LensCompactRowProps {
   onOpenDetails: (lens: Lens) => void;
   onAddToList: (lens: Lens) => void;
   isAddedToActiveList?: boolean;
+  isAdmin?: boolean;
+  onDeleteLens?: (lensId: string) => void;
 }
 
 export const LensCompactRow: React.FC<LensCompactRowProps> = ({
@@ -21,9 +23,19 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
   onOpenDetails,
   onAddToList,
   isAddedToActiveList,
+  isAdmin,
+  onDeleteLens,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
   const isContact = lens.productType === 'contact_lens';
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+
+  React.useEffect(() => {
+    if (showDeleteConfirm) {
+      const timer = setTimeout(() => setShowDeleteConfirm(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showDeleteConfirm]);
 
   return (
     <div
@@ -111,6 +123,28 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
         >
           {isAddedToActiveList ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
         </button>
+
+        {isAdmin && onDeleteLens && (
+          <button
+            onClick={() => {
+              if (!showDeleteConfirm) {
+                setShowDeleteConfirm(true);
+                return;
+              }
+              setShowDeleteConfirm(false);
+              onDeleteLens(lens.id);
+            }}
+            className={`p-1.5 border rounded-lg transition flex items-center justify-center gap-1 ${
+              showDeleteConfirm
+                ? 'border-rose-400 bg-rose-600 text-white animate-pulse px-2'
+                : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+            }`}
+            title={showDeleteConfirm ? 'Silmek için tekrar tıklayın' : 'Katalogdan Sil'}
+          >
+            <Trash2 className="w-4 h-4" />
+            {showDeleteConfirm && <span className="text-[9px] font-bold">Emin misiniz?</span>}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -34,6 +34,9 @@ interface LensSearchBarProps {
   setCylCheck: (val: string) => void;
   totalMatches: number;
   onResetFilters: () => void;
+  isAdmin?: boolean;
+  onDeleteBrand?: (brand: string) => void;
+  onDeleteDistributor?: (distributor: string) => void;
 }
 
 const EYEGLASS_CATEGORIES: { id: string; label: string }[] = [
@@ -87,6 +90,9 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
   setCylCheck,
   totalMatches,
   onResetFilters,
+  isAdmin,
+  onDeleteBrand,
+  onDeleteDistributor,
 }) => {
   const hasActiveFilters =
     searchTerm !== '' ||
@@ -98,6 +104,23 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
     selectedDelivery !== 'all' ||
     sphCheck !== '' ||
     cylCheck !== '';
+
+  const [confirmDeleteBrand, setConfirmDeleteBrand] = React.useState<string | null>(null);
+  const [confirmDeleteDist, setConfirmDeleteDist] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (confirmDeleteBrand) {
+      const timer = setTimeout(() => setConfirmDeleteBrand(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmDeleteBrand]);
+
+  React.useEffect(() => {
+    if (confirmDeleteDist) {
+      const timer = setTimeout(() => setConfirmDeleteDist(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmDeleteDist]);
 
   const activeCategories =
     selectedProductType === 'contact_lens' ? CONTACT_LENS_CATEGORIES : EYEGLASS_CATEGORIES;
@@ -437,9 +460,55 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             <span className="font-semibold text-teal-700"> • Sadece Kontakt Lensler</span>
           )}
           {selectedDistributor !== 'all' && (
-            <span className="font-semibold text-indigo-700"> • Dağıtıcı: {selectedDistributor}</span>
+            <span className="font-semibold text-indigo-700">
+              {' • Dağıtıcı: '}{selectedDistributor}
+              {isAdmin && onDeleteDistributor && (
+                <button
+                  onClick={() => {
+                    if (confirmDeleteDist !== selectedDistributor) {
+                      setConfirmDeleteDist(selectedDistributor);
+                      return;
+                    }
+                    setConfirmDeleteDist(null);
+                    onDeleteDistributor(selectedDistributor);
+                  }}
+                  className={`ml-1.5 font-bold border rounded px-1.5 py-0.2 text-[10px] inline-flex items-center transition ${
+                    confirmDeleteDist === selectedDistributor
+                      ? 'border-rose-400 bg-rose-600 text-white animate-pulse'
+                      : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                  }`}
+                  title={confirmDeleteDist === selectedDistributor ? 'Silmek için tekrar tıklayın' : 'Tüm ürünlerini sil'}
+                >
+                  {confirmDeleteDist === selectedDistributor ? 'Emin misiniz?' : 'Firmayı Sil'}
+                </button>
+              )}
+            </span>
           )}
-          {selectedBrand !== 'all' && <span className="font-semibold text-slate-700"> • {selectedBrand}</span>}
+          {selectedBrand !== 'all' && (
+            <span className="font-semibold text-slate-700">
+              {' • '}{selectedBrand}
+              {isAdmin && onDeleteBrand && (
+                <button
+                  onClick={() => {
+                    if (confirmDeleteBrand !== selectedBrand) {
+                      setConfirmDeleteBrand(selectedBrand);
+                      return;
+                    }
+                    setConfirmDeleteBrand(null);
+                    onDeleteBrand(selectedBrand);
+                  }}
+                  className={`ml-1.5 font-bold border rounded px-1.5 py-0.2 text-[10px] inline-flex items-center transition ${
+                    confirmDeleteBrand === selectedBrand
+                      ? 'border-rose-400 bg-rose-600 text-white animate-pulse'
+                      : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                  }`}
+                  title={confirmDeleteBrand === selectedBrand ? 'Silmek için tekrar tıklayın' : 'Tüm ürünlerini sil'}
+                >
+                  {confirmDeleteBrand === selectedBrand ? 'Emin misiniz?' : 'Markayı Sil'}
+                </button>
+              )}
+            </span>
+          )}
           {selectedIndex !== 'all' && <span className="font-semibold text-slate-700"> • {selectedIndex} İndeks</span>}
         </div>
         {hasActiveFilters && (

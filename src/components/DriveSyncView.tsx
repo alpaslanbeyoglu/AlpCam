@@ -74,6 +74,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   onScanningStatusChange,
 }) => {
   // Folder & File state
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [folderUrl, setFolderUrl] = useState<string>(config.sourceUrl || KNOWN_DRIVE_FOLDER_URL);
   const [driveFiles, setDriveFiles] = useState<DriveFolderFileInfo[]>(KNOWN_DRIVE_FILES);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
@@ -1498,23 +1499,31 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
             </div>
 
             <div className="p-3.5 bg-rose-50/50 border border-rose-200 rounded-xl space-y-2">
-              <span className="font-bold text-rose-900 block">Kataloğu Sıfırla</span>
+              <span className="font-bold text-rose-900 block">Kataloğu Temizle (Boşalt)</span>
               <p className="text-[11px] text-rose-700">
-                Kataloğu Google Drive taranmış orijinal fabrika ve toptancı listesine geri döndürür.
+                Tarayıcı belleğinde kalmış tüm eski demo verileri ve mevcut katalog listelerini tamamen silerek sıfırlar.
               </p>
               <button
                 onClick={() => {
-                  if (confirm('Kataloğu Drive taranmış varsayılan cam listesine döndürmek istediğinize emin misiniz?')) {
-                    onResetToDefaultCatalog();
-                    setStatusMessage({
-                      type: 'success',
-                      message: 'Katalog varsayılan fabrika fiyat listesine sıfırlandı.',
-                    });
+                  if (!showClearConfirm) {
+                    setShowClearConfirm(true);
+                    setTimeout(() => setShowClearConfirm(false), 4000);
+                    return;
                   }
+                  setShowClearConfirm(false);
+                  onResetToDefaultCatalog();
+                  setStatusMessage({
+                    type: 'success',
+                    message: 'Katalogdaki tüm eski veriler tamamen temizlendi.',
+                  });
                 }}
-                className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold transition"
+                className={`w-full py-2 rounded-lg font-bold transition ${
+                  showClearConfirm
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse'
+                    : 'bg-rose-100 hover:bg-rose-200 text-rose-900'
+                }`}
               >
-                Varsayılana Sıfırla
+                {showClearConfirm ? 'Emin misiniz? (Evet, Tamamen Sil)' : 'Tüm Kataloğu Temizle'}
               </button>
             </div>
           </div>

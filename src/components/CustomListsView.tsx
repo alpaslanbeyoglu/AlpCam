@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomList, CustomListItem, BrandDiscount, Lens } from '../types';
 import { calculateLensFinancials, formatCurrency, sanitizeLens } from '../utils/pricing';
 import { 
@@ -83,19 +83,31 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
     setIsCreatingList(false);
   };
 
+  const [listToDelete, setListToDelete] = useState<string | null>(null);
+
   const handleDeleteList = (listId: string) => {
     if (customLists.length <= 1) {
       alert('En az bir liste kalmalıdır.');
       return;
     }
-    if (window.confirm('Bu listeyi ve içindeki camları silmek istediğinize emin misiniz?')) {
-      const next = customLists.filter((l) => l.id !== listId);
-      onUpdateLists(next);
-      if (selectedListId === listId) {
-        setSelectedListId(next[0].id);
-      }
+    if (listToDelete !== listId) {
+      setListToDelete(listId);
+      return;
+    }
+    setListToDelete(null);
+    const next = customLists.filter((l) => l.id !== listId);
+    onUpdateLists(next);
+    if (selectedListId === listId) {
+      setSelectedListId(next[0].id);
     }
   };
+
+  useEffect(() => {
+    if (listToDelete) {
+      const timer = setTimeout(() => setListToDelete(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [listToDelete]);
 
   const handleRemoveItem = (itemId: string) => {
     if (!activeList) return;
@@ -300,10 +312,14 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
             </div>
             <button
               onClick={() => handleDeleteList(activeList.id)}
-              className="text-xs text-slate-400 hover:text-rose-600 flex items-center gap-1 transition"
+              className={`text-xs flex items-center gap-1 transition ${
+                listToDelete === activeList.id
+                  ? 'text-rose-600 font-bold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 animate-pulse'
+                  : 'text-slate-400 hover:text-rose-600'
+              }`}
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Listeyi Sil</span>
+              <span>{listToDelete === activeList.id ? 'Emin misiniz? (Evet, Sil)' : 'Listeyi Sil'}</span>
             </button>
           </div>
 
