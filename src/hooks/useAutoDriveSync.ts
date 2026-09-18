@@ -3,6 +3,7 @@ import { db, collection, getDocs, setDoc, doc, query, where, orderBy } from '../
 import { fetchDriveFiles, scanSingleDriveFile } from '../utils/driveScannerService';
 import { Lens, DriveSyncConfig } from '../types';
 import { DriveFolderFileInfo } from '../data/driveScannedCatalog';
+import { cleanUndefined } from '../utils/storage';
 
 export function useAutoDriveSync(
   isAdmin: boolean,
@@ -57,44 +58,44 @@ export function useAutoDriveSync(
               const chunk = res.lenses.slice(c, c + chunkSize);
               await Promise.all(
                 chunk.map(l => 
-                  setDoc(doc(db, 'catalog', l.id), {
+                  setDoc(doc(db, 'catalog', l.id), cleanUndefined({
                     ...l,
                     sourceFileId: file.id,
                     sourceFileName: file.name,
                     updatedAt: new Date().toISOString()
-                  })
+                  }))
                 )
               );
             }
 
             // Mark file as successfully processed in Firestore
-            await setDoc(doc(db, 'processedFiles', file.id), {
+            await setDoc(doc(db, 'processedFiles', file.id), cleanUndefined({
               fileId: file.id,
               fileName: file.name,
               lastScanTime: new Date().toISOString(),
               status: 'success',
               extractedCount: res.lenses.length
-            });
+            }));
           } else {
             // Mark file as error/skipped so it doesn't repeatedly block future syncs
-            await setDoc(doc(db, 'processedFiles', file.id), {
+            await setDoc(doc(db, 'processedFiles', file.id), cleanUndefined({
               fileId: file.id,
               fileName: file.name,
               lastScanTime: new Date().toISOString(),
               status: 'error',
               message: res.error || 'Ürün listesi okunamadı'
-            });
+            }));
           }
         } catch (fileErr: any) {
           console.error(`Auto sync error for file ${file.name}:`, fileErr);
           try {
-            await setDoc(doc(db, 'processedFiles', file.id), {
+            await setDoc(doc(db, 'processedFiles', file.id), cleanUndefined({
               fileId: file.id,
               fileName: file.name,
               lastScanTime: new Date().toISOString(),
               status: 'error',
               message: fileErr?.message || 'İşlem hatası'
-            });
+            }));
           } catch (_) {}
         }
 

@@ -41,7 +41,7 @@ export async function scanSingleDriveFile(
   let timeoutId: any = null;
   try {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes for large PDFs / model retries
+    timeoutId = setTimeout(() => controller.abort(), 480000); // 8 minutes for large PDFs / model retries
 
     const res = await fetch('/api/drive/scan-file', {
       method: 'POST',
@@ -117,7 +117,7 @@ export async function scanSingleDriveFile(
       success: false,
       lenses: [],
       error: err.name === 'AbortError' || err.message?.toLowerCase().includes('aborted')
-        ? 'İşlem zaman aşımına uğradı (5 dk).'
+        ? 'İşlem zaman aşımına uğradı (8 dk). Dosya çok büyük veya yapay zeka yanıt süresi uzun.'
         : (err.message || 'Tarama başarısız oldu')
     };
   } finally {

@@ -466,10 +466,11 @@ export default function App() {
         // 4. Category
         if (selectedCategory !== 'all') {
           if (selectedProductType === 'contact_lens') {
-            if (selectedCategory === 'single_vision' && lens.lensType && lens.lensType !== 'spheric') return false;
-            if (selectedCategory === 'custom_rx' && lens.lensType && lens.lensType !== 'toric') return false;
-            if (selectedCategory === 'progressive' && lens.lensType && lens.lensType !== 'multifocal') return false;
-            if (selectedCategory === 'photochromic' && lens.lensType && lens.lensType !== 'color') return false;
+            if (selectedCategory === 'spheric' && lens.lensType && lens.lensType !== 'spheric') return false;
+            if (selectedCategory === 'toric' && lens.lensType && lens.lensType !== 'toric') return false;
+            if (selectedCategory === 'multifocal' && lens.lensType && lens.lensType !== 'multifocal') return false;
+            if (selectedCategory === 'color' && lens.lensType && lens.lensType !== 'color') return false;
+            if (selectedCategory === 'transparent' && lens.lensType === 'color') return false;
           } else {
             if (lens.category !== selectedCategory) {
               return false;

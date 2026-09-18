@@ -3,7 +3,7 @@ import { CustomList, CustomListItem, BrandDiscount, Lens } from '../types';
 import { calculateLensFinancials, formatCurrency, sanitizeLens } from '../utils/pricing';
 import { 
   Plus, Trash2, Share2, Printer, Copy, Check, MessageSquare, 
-  FolderPlus, ChevronRight, Edit3, User, Sparkles, ShieldCheck 
+  FolderPlus, ChevronRight, Edit3, User, Sparkles, ShieldCheck, FileText 
 } from 'lucide-react';
 
 interface CustomListsViewProps {
@@ -197,6 +197,125 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
     window.print();
   };
 
+  const handleExportPDF = () => {
+    if (!activeList || activeList.items.length === 0) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Lütfen tarayıcınızın pop-up engelleyicisini kapatın.');
+      return;
+    }
+
+    let html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>${activeList.name} - Optik Fiyat Teklifi ve Ürün Rehberi</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; padding: 30px; margin: 0; background: #fff; }
+    .header { border-bottom: 2px solid #0284c7; padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
+    .title { font-size: 20px; font-weight: 800; color: #0369a1; margin: 0 0 5px 0; }
+    .subtitle { font-size: 12px; color: #64748b; }
+    .meta { font-size: 12px; text-align: right; color: #475569; }
+    .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    .th { background: #f0f9ff; color: #0369a1; font-weight: bold; text-align: left; padding: 10px; font-size: 12px; border-bottom: 1px solid #bae6fd; }
+    .td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12px; vertical-align: top; }
+    .features { margin-top: 6px; font-size: 11px; color: #047857; background: #ecfdf5; padding: 8px 10px; border-radius: 6px; border: 1px solid #a7f3d0; line-height: 1.4; }
+    .total-box { margin-top: 25px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; text-align: right; }
+    .total-text { font-size: 14px; font-weight: bold; color: #334155; }
+    .total-price { font-size: 20px; font-weight: 900; color: #059669; }
+    .footer { margin-top: 40px; font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+    @media print {
+      body { padding: 10px; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1 class="title">👓 OPTİK FİYAT TEKLİFİ VE ÜRÜN REHBERİ</h1>
+      <div class="subtitle">Özel Liste / Teklif: <strong>${activeList.name}</strong></div>
+      ${activeList.patientName ? `<div class="subtitle">Hasta / Müşteri: <strong>${activeList.patientName}</strong></div>` : ''}
+    </div>
+    <div class="meta">
+      <div>Tarih: ${new Date().toLocaleDateString('tr-TR')}</div>
+      <div>Profesyonel Optik Danışmanlık</div>
+    </div>
+  </div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="th" style="width: 5%;">#</th>
+        <th class="th" style="width: 50%;">Ürün, Marka & Faydalı Özellikler</th>
+        <th class="th" style="width: 15%;">Miktar</th>
+        <th class="th" style="width: 30%; text-align: right;">Satış Fiyatı</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+    activeList.items.forEach((item, index) => {
+      const lens = sanitizeLens(item.lensSnapshot);
+      const qText = item.quantity === 2 ? 'Çift Cam (2 Adet)' : 'Tek Cam (1 Adet)';
+      const price = item.customRetailPrice ?? (lens.retailPrice * item.quantity);
+      
+      html += `
+      <tr>
+        <td class="td"><strong>${index + 1}</strong></td>
+        <td class="td">
+          <div style="font-weight: bold; font-size: 13px; color: #0f172a;">${lens.brand} - ${lens.name}</div>
+          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">İndeks: ${lens.index} | Kategori: ${lens.category} | Tür: ${lens.deliveryType === 'stock' ? 'Stok Cam' : 'RX Özel'}</div>
+          <div class="features">
+            <strong>✨ Öne Çıkan Faydalar & Kaplama:</strong> ${lens.coating || 'Standart Yüksek Kalite Kaplama'}
+            ${lens.material ? `<br>• <em>Materyal: ${lens.material}</em>` : ''}
+            ${lens.notes ? `<br>• <em>Detay: ${lens.notes}</em>` : ''}
+          </div>
+        </td>
+        <td class="td">${qText}</td>
+        <td class="td" style="text-align: right; font-weight: bold; color: #0f172a; font-size: 13px;">
+          ${formatCurrency(price, lens.currency)}
+        </td>
+      </tr>`;
+    });
+
+    html += `
+    </tbody>
+  </table>
+
+  <div class="total-box">
+    <span class="total-text">TOPLAM TEKLİF TUTARI (KDV Dahil): </span>
+    <span class="total-price">${formatCurrency(listFinancials.totalRetail)}</span>
+  </div>
+
+  <div style="margin-top: 20px; font-size: 11px; color: #475569; background: #fffbeb; border: 1px solid #fde68a; padding: 12px; border-radius: 6px; line-height: 1.5;">
+    <strong>Garanti & Kullanım Bilgilendirmesi:</strong> Teklifimizde sunulan tüm optik camlar orijinal garanti sertifikası ile teslim edilir. Optik uyum ve alışma süreci boyunca ücretsiz danışmanlık hizmeti sunulmaktadır. Bu teklif 15 gün geçerlidir.
+  </div>
+
+  <div style="margin-top: 30px; text-align: center;" class="no-print">
+    <button onclick="window.print()" style="background: #0284c7; color: white; border: none; padding: 12px 24px; font-size: 14px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+      🖨️ PDF Olarak Kaydet / Yazdır
+    </button>
+  </div>
+
+  <div class="footer">
+    Optik Yönetim ve Satış Asistanı • Müşteri Bilgilendirme ve Teklif Belgesi
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    };
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-3 sm:p-6 space-y-4">
       {/* Official Catalog Guidance Banner */}
@@ -268,6 +387,15 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
             >
               <MessageSquare className="w-3.5 h-3.5" />
               <span>WhatsApp</span>
+            </button>
+
+            <button
+              onClick={handleExportPDF}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 flex items-center gap-1 transition shadow-xs"
+              title="Müşteri İçin PDF Teklif Belgesi Oluştur"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>PDF İndir</span>
             </button>
 
             <button

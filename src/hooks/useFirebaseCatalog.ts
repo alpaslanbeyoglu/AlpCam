@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, collection, getDocs, setDoc, doc, onSnapshot, query, orderBy } from '../lib/firebase';
 import { Lens, BrandDiscount, CustomList } from '../types';
+import { cleanUndefined } from '../utils/storage';
 
 export function useFirebaseCatalog() {
   const [lenses, setLenses] = useState<Lens[]>([]);
@@ -39,7 +40,7 @@ export function useFirebaseCatalog() {
   }, []);
 
   const saveLens = async (lens: Lens) => {
-    await setDoc(doc(db, 'catalog', lens.id), { ...lens, updatedAt: new Date().toISOString() });
+    await setDoc(doc(db, 'catalog', lens.id), cleanUndefined({ ...lens, updatedAt: new Date().toISOString() }));
   };
 
   const saveLenses = async (newItems: Lens[], mode: 'replace' | 'merge') => {
@@ -64,7 +65,7 @@ export function useFirebaseCatalog() {
   };
 
   const saveDiscount = async (discount: BrandDiscount) => {
-    await setDoc(doc(db, 'discounts', discount.brand), discount);
+    await setDoc(doc(db, 'discounts', discount.brand), cleanUndefined(discount));
   };
 
   const saveDiscounts = async (items: BrandDiscount[]) => {
@@ -73,7 +74,7 @@ export function useFirebaseCatalog() {
   };
 
   const saveCustomList = async (list: CustomList) => {
-    await setDoc(doc(db, 'customLists', list.id), { ...list, updatedAt: new Date().toISOString() });
+    await setDoc(doc(db, 'customLists', list.id), cleanUndefined({ ...list, updatedAt: new Date().toISOString() }));
   };
 
   const saveCustomLists = async (items: CustomList[]) => {

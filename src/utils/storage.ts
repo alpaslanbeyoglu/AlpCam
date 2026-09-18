@@ -215,3 +215,19 @@ export function saveStoredDistributors(distributors: DistributorInfo[]): void {
     console.error('Failed to save distributors to storage:', err);
   }
 }
+
+export function cleanUndefined(obj: any): any {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefined);
+  }
+  const cleaned: any = {};
+  for (const key of Object.keys(obj)) {
+    if (obj[key] !== undefined) {
+      cleaned[key] = cleanUndefined(obj[key]);
+    }
+  }
+  return cleaned;
+}
+

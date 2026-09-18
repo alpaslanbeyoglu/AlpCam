@@ -152,9 +152,9 @@ async function analyzeBufferWithGemini(
 ) {
   const b64 = buffer.toString('base64');
   const modelsToTry = [
-    'gemini-3.1-flash-lite',
     'gemini-3.8-flash',
-    'gemini-flash-latest'
+    'gemini-flash-latest',
+    'gemini-3.1-flash-lite'
   ];
 
   // Ensure mimeType is compatible with Gemini
@@ -625,21 +625,22 @@ app.post('/api/drive/scan-file', async (req, res) => {
     }
 
     const lowerName = (fileName || '').toLowerCase();
-    const isLargeHoya = lowerName.includes('hoya') && (lowerName.includes('perakende') || lowerName.includes('toptan'));
+    const isKnownLargeFile = (lowerName.includes('hoya') || lowerName.includes('seiko')) && (lowerName.includes('perakende') || lowerName.includes('toptan'));
 
-    // HOYA Perakende & Toptan files are 24MB, which exceeds Gemini inlineData 20MB limit and causes Cloud Run proxy timeouts
-    if (isLargeHoya) {
-      console.log(`[Drive Scanner] Known large HOYA catalog file detected (${fileName}). Serving verified catalog.`);
-      const hoyaLenses = DRIVE_EXTRACTED_LENSES.filter(l => (l.brand || '').toLowerCase().includes('hoya'));
-      if (hoyaLenses.length > 0) {
+    // HOYA & SEIKO catalogs are large (12-24MB), which often exceeds Gemini inlineData limits or causes timeouts
+    if (isKnownLargeFile) {
+      console.log(`[Drive Scanner] Known large catalog file detected (${fileName}). Serving verified fallback catalog.`);
+      const brand = lowerName.includes('hoya') ? 'HOYA' : 'SEIKO';
+      const fallbackLenses = DRIVE_EXTRACTED_LENSES.filter(l => (l.brand || '').toLowerCase().includes(brand.toLowerCase()));
+      if (fallbackLenses.length > 0) {
         return res.json({
           success: true,
           fileId,
           fileName,
-          count: hoyaLenses.length,
-          brand: 'HOYA',
+          count: fallbackLenses.length,
+          brand: brand,
           modelUsed: 'pre-extracted-catalog',
-          lenses: hoyaLenses,
+          lenses: fallbackLenses,
         });
       }
     }
