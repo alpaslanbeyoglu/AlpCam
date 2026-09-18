@@ -37,6 +37,8 @@ import { BrandDiscountsView } from './components/BrandDiscountsView';
 import { CustomListsView } from './components/CustomListsView';
 import { DriveSyncView } from './components/DriveSyncView';
 import { DefinitionsView } from './components/DefinitionsView';
+import { AdminExportView } from './components/AdminExportView';
+import { PdfScannerView } from './components/PdfScannerView';
 import { AddLensModal } from './components/AddLensModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { BulkEditActions } from './components/BulkEditActions';
@@ -51,6 +53,7 @@ import {
   Sliders,
   FolderHeart,
   Search,
+  Lock,
 } from 'lucide-react';
 
 import { useFirebaseCatalog } from './hooks/useFirebaseCatalog';
@@ -75,7 +78,7 @@ export default function App() {
 
   // Navigation
   const [activeTab, setActiveTab] = useState<
-    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions'
+    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner'
   >('catalog');
 
   // App Settings
@@ -907,6 +910,45 @@ export default function App() {
         {/* TAB 5: ADMIN DEFINITIONS (FIRMS, BRANDS, HIERARCHY) */}
         <div className={activeTab === 'definitions' ? 'block' : 'hidden'}>
           <DefinitionsView isAdmin={isAdmin} showToast={showToast} />
+        </div>
+
+        {/* TAB 6: ADMIN EXPORT CENTER */}
+        <div className={activeTab === 'admin_export' ? 'block' : 'hidden'}>
+          <AdminExportView
+            isAdmin={isAdmin}
+            lenses={lenses}
+            brandDiscounts={brandDiscounts}
+            customLists={customLists}
+            showToast={showToast}
+          />
+        </div>
+
+        {/* TAB 7: AI PDF / DOCUMENT PRICE LIST SCANNER */}
+        <div className={activeTab === 'pdf_scanner' ? 'block' : 'hidden'}>
+          {isAdmin ? (
+            <PdfScannerView
+              onImportLenses={async (newLenses) => {
+                await saveLenses([...lenses, ...newLenses], 'replace');
+              }}
+              onSuccessToast={(msg) => showToast(msg)}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-20 p-8 bg-white rounded-3xl border border-slate-200 text-center space-y-4 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                <Lock className="w-8 h-8" />
+              </div>
+              <h2 className="text-base font-bold text-slate-900">Yönetici Yetkisi Gerekli</h2>
+              <p className="text-xs text-slate-500">
+                AI Fiyat Listesi Tarayıcı ve JSON Dönüştürücü aracını kullanabilmek için yönetici girişi yapmanız gerekmektedir.
+              </p>
+              <button
+                onClick={() => setIsAdminModalOpen(true)}
+                className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
+              >
+                Yönetici Girişi Yap
+              </button>
+            </div>
+          )}
         </div>
 
       </main>

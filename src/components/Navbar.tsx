@@ -1,9 +1,9 @@
 import React from 'react';
-import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck, Building2 } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck, Building2, FileJson } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions';
-  setActiveTab: (tab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions') => void;
+  activeTab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner';
+  setActiveTab: (tab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner') => void;
   isCustomerMode: boolean;
   setIsCustomerMode: (val: boolean) => void;
   pairCount: 1 | 2;
@@ -260,6 +260,34 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
             <span>Tanımlar (Firmalar)</span>
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('admin_export')}
+            className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
+              activeTab === 'admin_export'
+                ? 'bg-sky-600 text-white shadow-xs'
+                : 'text-sky-700 hover:bg-sky-50 border border-sky-200 bg-sky-50/40'
+            }`}
+          >
+            <FileJson className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span>Yönetici Çıktı Merkezi</span>
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('pdf_scanner')}
+            className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
+              activeTab === 'pdf_scanner'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-purple-700 hover:bg-purple-50 border border-purple-200 bg-purple-50/40'
+            }`}
+          >
+            <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span>AI Fiyat Listesi Tarayıcı</span>
           </button>
         )}
 

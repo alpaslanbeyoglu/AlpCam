@@ -206,8 +206,8 @@ async function analyzeBufferWithGemini(
 ) {
   const b64 = buffer.toString('base64');
   const modelsToTry = [
-    'gemini-3.8-flash',
-    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
     'gemini-flash-latest'
   ];
 
