@@ -269,61 +269,88 @@ ${ocrText}
 --- OCR HAM METİN BİTİŞİ ---`;
   }
 
-  let prompt = `Sen Türkiye optik gözlük camı ve kontakt lens sektöründe en üst düzey uzman yapay zekasın.
-Verilen dosya (${fileName}) bir optik cam veya kontakt lens fiyat listesi, toptan (TFL) / perakende (PFL) katalogu, kampanya tablosu veya PDF broşürüdür.
+  let prompt = `Sen optik ve oküler ürün kataloglarını (optik camlar, kontakt lensler, kaplamalar ve laboratuvar işçilik hizmetleri) analiz etmekle görevli uzman bir veri işleme asistanısın.
+
+GÖREV:
+Sana sunulan belge, görsel veya metin formatındaki optik fiyat listesini satır satır analiz et ve aşağıdaki strict (katı) kurallara uygun, temiz ve geçerli tek bir JSON dizisi (array) oluştur.
+
+KURALLAR VE ALAN KISITLAMALARI:
+
+1. ÇIKTI FORMATI:
+   - Sadece ve sadece geçerli bir JSON dizisi (array) döndür.
+   - Kod bloğundan önce veya sonra hiçbir açıklama, selamlama veya dipnot YAZMA.
+   - Yorum satırı (// veya /* */) KULLANMA.
+
+2. ALAN TİPLERİ VE DEĞER KISITLAMALARI:
+
+   - productType (string):
+     * "eyeglass_lens" (Gözlük camları)
+     * "contact_lens" (Kontakt lensler)
+     * "service" (Kaplama, renklendirme, özel işçilik ve imalat hizmetleri)
+
+   - category (string):
+     * "single_vision" (Tek odaklı)
+     * "progressive" (Progresif)
+     * "office" (Ofis/Degresif/Yakın-Orta)
+     * "bifocal" (Bifokal)
+     * "photochromic" (Fotokromik/Kolormatik)
+     * "drive" (Sürüş)
+     * "sun_polarized" (Güneş / Polarize)
+     * "myopia_control" (Miyopi kontrol / Defocus)
+     * "specialty" (Bikonveks, Bikonkav, Lentiküler, Medikal vb.)
+     * "therapeutic" (Terapatik / FL41 / Özel filtreler)
+     * "contact_lens" (Kontakt lensler)
+     * "customization" (İşçilik, çap küçültme, prizma, kaplama silme vb.)
+
+   - index (string veya null):
+     * İzin verilen değerler: "1.49", "1.50", "1.53", "1.56", "1.57", "1.58", "1.59", "1.60", "1.61", "1.67", "1.74", "1.80", "1.90"
+     * Hizmetler (service) veya indeksi belirtilmeyen ürünler için null geç.
+
+   - deliveryType (string):
+     * "stock" (Stok camlar)
+     * "rx" (Özel üretim / Sipariş camlar)
+     * "custom" (İşçilik, kaplama farkı, filtre boyama hizmetleri)
+
+   - KONTAKT LENS ALANLARI (Sadece productType = "contact_lens" ise doldur, aksi halde null bırak):
+     * wearPeriod: "daily" | "monthly" | null
+     * lensType: "spheric" | "toric" | "multifocal" | "color" | null
+
+3. VARYASYONLAR VE FİYATLANDIRMA:
+   - Aynı model altında farklı materyal (örn: Beyaz, Transitions, Polarize), farklı numara grupları (örn: 6/2, 8/4) veya indeks ayrımı varsa, her bir kombinasyonu ayrı bir JSON nesnesi (item) olarak kır veya name/series alanında belirterek açıkça ayır.
+   - Fiyatlar sayısal (number) olmalıdır. Para birimi simgelerini (₺, $, €) kaldır.
+   - Bilinmeyen veya belgede yer almayan alanlar için null kullan.
+
 ${brandHint ? `Öncelikli Marka: ${brandHint}` : ''}
 ${adminInstruction}
 ${productTypeInstruction}
 ${ocrAugmentation}
 
-KRİTİK GÖREV TALİMATLARI:
-1. EKSİKSİZ SATIR SATIR ÇIKARIM (100% EXTRACTION):
-   - Belgede veya tablolarda yer alan TÜM ÜRÜNLERİ, TÜM İNDEKSLERİ (1.50, 1.53 Trivex, 1.56, 1.59 Polikarbon, 1.60 MR-8, 1.67, 1.74, 1.80, 1.90 Mineral/Organik), TÜM KAPLAMALARI VE BÜTÜN DİZAYNLARI eksiksiz olarak JSON listesine ekle.
-   - Kesinlikle örnekleme yapıp ilk 5-10 ürünü alıp kesme; katalogdaki her bir satırı ayrı bir ürün olarak çıkar.
-
-2. TÜRKÇE FİYAT VE PARA BİRİMİ AYRIŞTIRMA (ÇOK ÖNEMLİ):
-   - Türkiye fiyat formatında nokta (.) binlik ayıracıdır, virgül (,) ondalık ayıracıdır.
-   - Örnek: "2.850,00 TL" -> 2850 (Kesinlikle 2.85 yapma!). "1.200 TL" -> 1200, "750,00" -> 750, "18.500" -> 18500.
-   - DİKKAT: Belgede veya dosya adında "Desio", "Adore", "Euro", "€" veya "$" geçiyorsa, currency alanını KESİNLİKLE "EUR" veya "USD" olarak ayarla. Varsayılan olarak her şeye "TRY" deme! Rakamları tam veya ondalıklı sayı olarak aktar.
-   - Eğer liste PERAKENDE (PFL) ise veya tavsiye satış fiyatı içeriyorsa: retailPrice alanını doldur.
-   - Eğer liste TOPTAN (TFL) ise veya optisyen alış fiyatı içeriyorsa: wholesalePrice alanını doldur.
-
-3. ÜRÜN SINIFLANDIRMASI VE DAĞITICI:
-   - Gözlük camları (productType: "eyeglass_lens"): Tek odaklı (single_vision), progresif (progressive), ofis (office), bifokal (bifocal), fotokromik/transitions (photochromic), güneş/polarize (sun_polarized), sürüş (drive), özel üretim (custom_rx).
-   - Kontakt lensler (productType: "contact_lens"): Kutu içeriği (6'lı Kutu, 30'lu Kutu), BC (8.4, 8.6, 8.8), DIA (14.2), değişim süresi (daily, monthly, yearly), lens tipi (spheric, toric, multifocal, color).
-   - DAĞITICI / ÜST FİRMA (distributor): İlgili markanın Türkiye'deki ana distribütörünü belirt (örn: Lens Medikal, HOYA Vision Care & Seiko Optical, Beta Optik (Novax), Carl Zeiss Vision, Opsa Optik, CooperVision Türkiye, EssilorLuxottica, Merve Optik, Alcon Vision Care, Bausch + Lomb).
-
-JSON çıktısı şu formatta OLMALIDIR:
-{
-  "brand": "Marka Adı",
-  "distributor": "Üst Dağıtıcı Firma",
-  "listType": "perakende veya toptan veya kampanya",
-  "lenses": [
-    {
-      "name": "Ürün Tam Adı (örn: Perfalit 1.60 Solitaire LayR veya Biofinity Toric 6'lı Kutu)",
-      "brand": "Marka Adı",
-      "distributor": "Dağıtıcı / Üst Firma",
-      "productType": "eyeglass_lens veya contact_lens",
-      "category": "single_vision | progressive | office | photochromic | sun_polarized | drive | contact_lens | custom_rx",
-      "index": "1.50 veya 1.56 veya 1.60 veya 1.67 veya 1.74 veya BC 8.6",
-      "material": "Organik / MR-8 / Silikon Hidrojel / Mineral / Trivex / vb.",
-      "coating": "Kaplama veya lens teknolojisi (örn: Crizal Sapphire, Solitaire LayR, Aquaform, Antirefle)",
-      "wholesalePrice": 1250,
-      "retailPrice": 2500,
-      "currency": "TRY",
-      "deliveryType": "stock veya rx",
-      "boxContent": "6'lı Kutu veya 30'lu Kutu (kontakt lens ise)",
-      "wearPeriod": "daily veya monthly veya yearly (kontakt lens ise)",
-      "lensType": "spheric veya toric veya multifocal veya color (kontakt lens ise)",
-      "baseCurve": "8.4 veya 8.6 (kontakt lens ise)",
-      "diameter": "14.2 veya 65/70/75",
-      "sphRange": "-12.00 / +8.00",
-      "cylMax": 2.0,
-      "notes": "Ek açıklama veya özellikler"
-    }
-  ]
-}
-Sadece geçerli bir JSON döndür.`;
+JSON ŞEMASI (Örnek Dizi):
+[
+  {
+    "brand": "Marka Adı (Örn: Novax, Zeiss, Selcon)",
+    "series": "Ürün Serisi / Ailesi (Örn: Nucleo, SmartLife, Excelite) veya null",
+    "name": "Tam Ürün Adı / Varyasyon Açıklaması",
+    "productType": "eyeglass_lens | contact_lens | service",
+    "category": "single_vision | progressive | office | bifocal | photochromic | drive | sun_polarized | myopia_control | specialty | therapeutic | contact_lens | customization",
+    "index": "1.61",
+    "material": "Hammadde (Örn: Organik, MR-8, Polikarbon, Trivex, Mineral) veya null",
+    "coating": "Kaplama Bilgisi (Örn: PixarUV Granite, DuraVision, HMC) veya null",
+    "wholesalePrice": null,
+    "retailPrice": 2500,
+    "currency": "TRY",
+    "sphRange": "-6.00 / +6.00",
+    "cylMax": 2,
+    "diameter": "70/75",
+    "baseCurve": "8.6",
+    "boxContent": "6'lı Kutu",
+    "wearPeriod": "daily | monthly",
+    "lensType": "spheric | toric | multifocal | color",
+    "deliveryType": "stock | rx | custom",
+    "code": "Sipariş / Ürün Kodu"
+  }
+]
+Sadece geçerli bir JSON dizisi döndür.`;
 
   let lastError: any = null;
 
@@ -413,7 +440,7 @@ Sadece geçerli bir JSON döndür.`;
         if (openBrackets > closeBrackets) cleanRawText += ']'.repeat(openBrackets - closeBrackets);
         if (openBraces > closeBraces) cleanRawText += '}'.repeat(openBraces - closeBraces);
 
-        const jsonMatch = cleanRawText.match(/\{[\s\S]*\}/);
+        const jsonMatch = cleanRawText.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
         if (jsonMatch) {
           cleanRawText = jsonMatch[0];
         }

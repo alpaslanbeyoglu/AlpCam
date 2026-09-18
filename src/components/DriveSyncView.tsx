@@ -100,35 +100,81 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
 
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
-  const PROMPT_TEXT = `Aşağıda sana vereceğim optik cam veya kontakt lens fiyat listesi belgesini/görselini satır satır analiz et ve bizim sistemimiz için temiz, geçerli bir JSON dizisi formatına dönüştür. Hiçbir açıklama yazma, sadece geçerli bir JSON dizisi döndür.
+  const PROMPT_TEXT = `Sen optik ve oküler ürün kataloglarını (optik camlar, kontakt lensler, kaplamalar ve laboratuvar işçilik hizmetleri) analiz etmekle görevli uzman bir veri işleme asistanısın.
 
-Cam kategorileri şunlardan biri olmalıdır: "single_vision" (tek odaklı), "progressive" (progresif), "office" (ofis/yakın-orta), "bifocal" (bifokal), "photochromic" (fotokromik), "drive" (sürüş), "sun_polarized" (güneş/polarize), "contact_lens" (kontakt lens).
+GÖREV:
+Sana sunulan belge, görsel veya metin formatındaki optik fiyat listesini satır satır analiz et ve aşağıdaki strict (katı) kurallara uygun, temiz ve geçerli tek bir JSON dizisi (array) oluştur.
 
-İndeksler şunlardan biri olmalıdır: "1.50", "1.53", "1.56", "1.59", "1.60", "1.67", "1.74", "1.80", "1.90".
+KURALLAR VE ALAN KISITLAMALARI:
 
-Kontakt lensler için wearPeriod "daily" veya "monthly", lensType ise "spheric", "toric", "multifocal", "color" olmalıdır.
+1. ÇIKTI FORMATI:
+   - Sadece ve sadece geçerli bir JSON dizisi (array) döndür.
+   - Kod bloğundan önce veya sonra hiçbir açıklama, selamlama veya dipnot YAZMA.
+   - Yorum satırı (// veya /* */) KULLANMA.
 
-JSON Şeması:
+2. ALAN TİPLERİ VE DEĞER KISITLAMALARI:
+
+   - productType (string):
+     * "eyeglass_lens" (Gözlük camları)
+     * "contact_lens" (Kontakt lensler)
+     * "service" (Kaplama, renklendirme, özel işçilik ve imalat hizmetleri)
+
+   - category (string):
+     * "single_vision" (Tek odaklı)
+     * "progressive" (Progresif)
+     * "office" (Ofis/Degresif/Yakın-Orta)
+     * "bifocal" (Bifokal)
+     * "photochromic" (Fotokromik/Kolormatik)
+     * "drive" (Sürüş)
+     * "sun_polarized" (Güneş / Polarize)
+     * "myopia_control" (Miyopi kontrol / Defocus)
+     * "specialty" (Bikonveks, Bikonkav, Lentiküler, Medikal vb.)
+     * "therapeutic" (Terapatik / FL41 / Özel filtreler)
+     * "contact_lens" (Kontakt lensler)
+     * "customization" (İşçilik, çap küçültme, prizma, kaplama silme vb.)
+
+   - index (string veya null):
+     * İzin verilen değerler: "1.49", "1.50", "1.53", "1.56", "1.57", "1.58", "1.59", "1.60", "1.61", "1.67", "1.74", "1.80", "1.90"
+     * Hizmetler (service) veya indeksi belirtilmeyen ürünler için null geç.
+
+   - deliveryType (string):
+     * "stock" (Stok camlar)
+     * "rx" (Özel üretim / Sipariş camlar)
+     * "custom" (İşçilik, kaplama farkı, filtre boyama hizmetleri)
+
+   - KONTAKT LENS ALANLARI (Sadece productType = "contact_lens" ise doldur, aksi halde null bırak):
+     * wearPeriod: "daily" | "monthly" | null
+     * lensType: "spheric" | "toric" | "multifocal" | "color" | null
+
+3. VARYASYONLAR VE FİYATLANDIRMA:
+   - Aynı model altında farklı materyal (örn: Beyaz, Transitions, Polarize), farklı numara grupları (örn: 6/2, 8/4) veya indeks ayrımı varsa, her bir kombinasyonu ayrı bir JSON nesnesi (item) olarak kır veya name/series alanında belirterek açıkça ayır.
+   - Fiyatlar sayısal (number) olmalıdır. Para birimi simgelerini (₺, $, €) kaldır.
+   - Bilinmeyen veya belgede yer almayan alanlar için null kullan.
+
+JSON ŞEMASI:
+
 [
   {
-    "brand": "Marka (Örn: Zeiss)",
-    "name": "Model/Ürün Adı (Örn: SmartLife)",
-    "productType": "eyeglass_lens" veya "contact_lens",
-    "category": "single_vision" veya "progressive" veya "photochromic" veya "contact_lens",
-    "index": "1.60",
-    "material": "Hammadde (Örn: Organik)",
-    "coating": "Kaplama (Örn: Duravision Platinum)",
-    "wholesalePrice": 1200,
-    "retailPrice": 2400,
+    "brand": "Marka Adı (Örn: Novax, Zeiss, Selcon)",
+    "series": "Ürün Serisi / Ailesi (Örn: Nucleo, SmartLife, Excelite) veya null",
+    "name": "Tam Ürün Adı / Varyasyon Açıklaması",
+    "productType": "eyeglass_lens | contact_lens | service",
+    "category": "single_vision | progressive | office | bifocal | photochromic | drive | sun_polarized | myopia_control | specialty | therapeutic | contact_lens | customization",
+    "index": "1.61",
+    "material": "Hammadde (Örn: Organik, MR-8, Polikarbon, Trivex, Mineral) veya null",
+    "coating": "Kaplama Bilgisi (Örn: PixarUV Granite, DuraVision, HMC) veya null",
+    "wholesalePrice": null,
+    "retailPrice": 2500,
     "currency": "TRY",
     "sphRange": "-6.00 / +6.00",
     "cylMax": 2,
     "diameter": "70/75",
     "baseCurve": "8.6",
     "boxContent": "6'lı Kutu",
-    "wearPeriod": "monthly",
-    "lensType": "spheric",
-    "deliveryType": "stock"
+    "wearPeriod": "daily | monthly",
+    "lensType": "spheric | toric | multifocal | color",
+    "deliveryType": "stock | rx | custom",
+    "code": "Sipariş / Ürün Kodu"
   }
 ]`;
 
