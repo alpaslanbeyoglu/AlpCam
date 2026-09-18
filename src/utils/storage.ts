@@ -1,6 +1,4 @@
 import { Lens, BrandDiscount, CustomList, DriveSyncConfig } from '../types';
-import { INITIAL_LENSES } from '../data/initialLenses';
-import { INITIAL_DISCOUNTS } from '../data/initialDiscounts';
 import { sanitizeLens, normalizeBrandName } from './pricing';
 import { DistributorInfo } from '../data/distributors';
 import { INITIAL_DISTRIBUTORS_LIST } from '../data/initialDistributors';

@@ -40,7 +40,7 @@ export interface Lens {
   isCustom?: boolean;       // Kullanıcı tarafından eklenen özel ürün
   sourceFileId?: string;    // Geldiği Drive dosya ID'si
   sourceFileName?: string;  // Geldiği PDF/Katalog dosya adı
-  sourceListType?: 'perakende' | 'toptan' | 'kampanya' | 'genel'; // Liste tipi (PFL, TFL, Kampanya)
+  sourceListType?: 'perakende' | 'toptan' | 'kampanya' | 'karisik' | 'genel'; // Liste tipi (PFL, TFL, Kampanya, Karışık)
   isCampaign?: boolean;     // Kampanyalı ürün mü
   campaignInfo?: string;    // Kampanya bilgisi/adı (örn: '2026 Yaz Kampanyası')
   campaignValidity?: string;// Kampanya geçerlilik tarihi (örn: '01.06.2026 - 31.10.2026')

@@ -5,8 +5,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Lens, BrandDiscount, CustomList, DriveSyncConfig } from './types';
-import { INITIAL_LENSES } from './data/initialLenses';
-import { INITIAL_DISCOUNTS } from './data/initialDiscounts';
 import {
   loadStoredLenses,
   saveStoredLenses,
@@ -585,15 +583,18 @@ export default function App() {
       await clearCatalog();
       await saveLenses(newLenses, 'replace');
     } else {
-      // Merge unique by name, but update prices if TFL/PFL lists are mixed
+      // Merge unique by specific key, but update prices if TFL/PFL lists are mixed
       const mergedMap = new Map<string, Lens>();
       
       // First, add all existing lenses
-      lenses.forEach((l) => mergedMap.set(l.name.toLowerCase().trim(), l));
+      lenses.forEach((l) => {
+        const key = `${l.brand}_${l.name}_${l.index}_${l.deliveryType}`.toLowerCase().trim();
+        mergedMap.set(key, l);
+      });
 
       // Then process new lenses
       newLenses.forEach((newLens) => {
-        const key = newLens.name.toLowerCase().trim();
+        const key = `${newLens.brand}_${newLens.name}_${newLens.index}_${newLens.deliveryType}`.toLowerCase().trim();
         const existing = mergedMap.get(key);
         
         if (existing) {

@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
+import Tesseract from 'tesseract.js';
 import { DRIVE_EXTRACTED_LENSES } from '../src/data/driveScannedCatalog';
 
 const PORT = 3000;
@@ -36,15 +38,17 @@ interface ParsedDriveFile {
   format: 'pdf' | 'image' | 'excel' | 'other';
   brand: string;
   productType?: 'eyeglass_lens' | 'contact_lens';
-  listType: 'perakende' | 'toptan' | 'kampanya' | 'genel';
+  listType: 'perakende' | 'toptan' | 'kampanya' | 'karisik' | 'genel';
   sizeFormatted?: string;
   downloadUrl: string;
   driveViewUrl: string;
+  folderCategory?: 'kampanyalar' | 'toptan_fiyatlar' | 'karisik' | 'genel';
 }
 
 // Helper to deduce brand and category from filename
-function inferFileInfo(fileName: string, mimeType: string, id: string): ParsedDriveFile {
+function inferFileInfo(fileName: string, mimeType: string, id: string, parentFolderName: string = ''): ParsedDriveFile {
   const lower = fileName.toLowerCase();
+  const lowerParent = (parentFolderName || '').toLowerCase();
   let brand = 'Diğer';
   let productType: 'eyeglass_lens' | 'contact_lens' = 'eyeglass_lens';
 
@@ -80,10 +84,19 @@ function inferFileInfo(fileName: string, mimeType: string, id: string): ParsedDr
     productType = 'contact_lens';
   }
 
-  let listType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
-  if (lower.includes('kampanya')) listType = 'kampanya';
-  else if (lower.includes('toptan') || lower.includes('tfl') || lower.includes('cv toptan')) listType = 'toptan';
-  else if (lower.includes('perakende') || lower.includes('parakende') || lower.includes('pfl')) listType = 'perakende';
+  let listType: 'perakende' | 'toptan' | 'kampanya' | 'karisik' | 'genel' = 'genel';
+  let folderCategory: 'kampanyalar' | 'toptan_fiyatlar' | 'karisik' | 'genel' = 'genel';
+
+  if (lower.includes('kampanya') || lowerParent.includes('kampanya')) {
+    listType = 'kampanya';
+    folderCategory = 'kampanyalar';
+  } else if (lower.includes('toptan') || lower.includes('tfl') || lowerParent.includes('toptan')) {
+    listType = 'toptan';
+    folderCategory = 'toptan_fiyatlar';
+  } else if (lower.includes('perakende') || lower.includes('parakende') || lower.includes('pfl') || lowerParent.includes('perakende') || lowerParent.includes('miks')) {
+    listType = 'karisik';
+    folderCategory = 'karisik';
+  }
 
   let format: 'pdf' | 'image' | 'excel' | 'other' = 'other';
   if (mimeType.includes('pdf') || lower.endsWith('.pdf')) format = 'pdf';
@@ -98,14 +111,21 @@ function inferFileInfo(fileName: string, mimeType: string, id: string): ParsedDr
     brand,
     productType,
     listType,
+    folderCategory,
     downloadUrl: `https://drive.google.com/uc?export=download&id=${id}`,
     driveViewUrl: `https://drive.google.com/file/d/${id}/view`,
   };
 }
 
-// Parse Google Drive shared folder HTML
-async function fetchDriveFolderFiles(folderUrl: string): Promise<ParsedDriveFile[]> {
+// Parse Google Drive shared folder HTML recursively (depth up to 2)
+async function fetchDriveFolderFiles(
+  folderUrl: string,
+  parentFolderName: string = '',
+  depth: number = 0,
+  maxDepth: number = 2
+): Promise<ParsedDriveFile[]> {
   try {
+    console.log(`[Crawl] Fetching folder page: ${folderUrl} (parent: ${parentFolderName}, depth: ${depth})`);
     const res = await fetch(folderUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -113,7 +133,8 @@ async function fetchDriveFolderFiles(folderUrl: string): Promise<ParsedDriveFile
     });
 
     if (!res.ok) {
-      throw new Error(`Google Drive klasörüne erişilemedi: HTTP ${res.status}`);
+      console.warn(`[Crawl] Could not fetch folder ${folderUrl}: HTTP ${res.status}`);
+      return [];
     }
 
     const html = await res.text();
@@ -129,7 +150,17 @@ async function fetchDriveFolderFiles(folderUrl: string): Promise<ParsedDriveFile
 
       if (!seenIds.has(id)) {
         seenIds.add(id);
-        files.push(inferFileInfo(name, mime, id));
+
+        if (mime === 'application/vnd.google-apps.folder') {
+          if (depth < maxDepth) {
+            console.log(`[Crawl] Found subfolder: ${name} (ID: ${id}). Crawling...`);
+            const subFolderUrl = `https://drive.google.com/drive/folders/${id}`;
+            const subFiles = await fetchDriveFolderFiles(subFolderUrl, name, depth + 1, maxDepth);
+            files.push(...subFiles);
+          }
+        } else {
+          files.push(inferFileInfo(name, mime, id, parentFolderName));
+        }
       }
     }
 
@@ -140,21 +171,44 @@ async function fetchDriveFolderFiles(folderUrl: string): Promise<ParsedDriveFile
   }
 }
 
+// Extract raw text from images using local/WASM Tesseract OCR
+async function runOcrOnImage(buffer: Buffer): Promise<string> {
+  try {
+    console.log('[OCR] Running Tesseract.js (tur+eng) OCR on image buffer...');
+    // Create an 8-second safety timeout so slow CDN downloads do not block the user's request
+    const ocrPromise = Tesseract.recognize(buffer, 'tur+eng');
+    const timeoutPromise = new Promise<null>((_, reject) => 
+      setTimeout(() => reject(new Error('Tesseract OCR Timeout')), 8000)
+    );
+
+    const result = await Promise.race([ocrPromise, timeoutPromise]);
+    if (result && 'data' in result) {
+      const text = result.data.text;
+      console.log(`[OCR] Tesseract extracted ${text.length} characters of raw text successfully.`);
+      return text;
+    }
+    return '';
+  } catch (err: any) {
+    console.warn('[OCR] Tesseract OCR failed or timed out, skipping to native vision:', err?.message || err);
+    return '';
+  }
+}
+
 // Generate lenses using Gemini with model fallback and Admin Price Mode decision
 async function analyzeBufferWithGemini(
   buffer: Buffer,
   mimeType: string,
   fileName: string,
   brandHint?: string,
-  priceMode: 'wholesale' | 'retail' | 'auto' = 'auto',
+  priceMode: 'wholesale' | 'retail' | 'karisik' | 'auto' = 'auto',
   profitMarkup: number = 2.0,
   productTypeHint: 'auto' | 'eyeglass_lens' | 'contact_lens' = 'auto'
 ) {
   const b64 = buffer.toString('base64');
   const modelsToTry = [
     'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite'
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest'
   ];
 
   // Ensure mimeType is compatible with Gemini
@@ -170,19 +224,25 @@ async function analyzeBufferWithGemini(
   }
 
   let adminInstruction = '';
-  let detectedListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 'genel';
+  let detectedListType: 'perakende' | 'toptan' | 'kampanya' | 'karisik' | 'genel' = 'genel';
   if (fileName.toLowerCase().includes('pfl') || fileName.toLowerCase().includes('perakende')) {
     detectedListType = 'perakende';
   } else if (fileName.toLowerCase().includes('tfl') || fileName.toLowerCase().includes('toptan')) {
     detectedListType = 'toptan';
-  } else if (fileName.toLowerCase().includes('kampanya') || fileName.toLowerCase().includes('kampanyasi')) {
+  } else if (fileName.toLowerCase().includes('kampanya') || fileName.toLowerCase().includes('kampanyasi') || fileName.toLowerCase().includes('promosyon')) {
     detectedListType = 'kampanya';
+  } else if (fileName.toLowerCase().includes('karisik') || fileName.toLowerCase().includes('karışık') || fileName.toLowerCase().includes('kodlu')) {
+    detectedListType = 'karisik';
   }
 
   if (priceMode === 'wholesale' || detectedListType === 'toptan') {
     adminInstruction = `\n*** YÖNETİCİ TALİMATI: Bu belge KESİNLİKLE TOPTAN (ALIŞ / TFL) FİYAT LİSTESİDİR. Belgedeki tüm fiyat sütunlarını wholesalePrice olarak kaydet.`;
   } else if (priceMode === 'retail' || detectedListType === 'perakende') {
     adminInstruction = `\n*** YÖNETİCİ TALİMATI: Bu belge KESİNLİKLE PERAKENDE (TAVSİYE EDİLEN SATIŞ / PFL) FİYAT LİSTESİDİR. Belgedeki tüm fiyatları retailPrice olarak kaydet.`;
+  } else if (priceMode === 'karisik' || detectedListType === 'karisik') {
+    adminInstruction = `\n*** YÖNETİCİ TALİMATI: Bu belge KESİNLİKLE KARIŞIK (ÜRÜN KODU MALİYETLİ & PERAKENDE AÇIK) FİYAT LİSTESİDİR.
+- Perakende satış fiyatı belgede açıkça yazar (örn. "2.500 TL" veya "2500"), bunu 'retailPrice' olarak kaydet.
+- Toptan alış fiyatı ise ürün kodunun (productCode) içine gizlenmiştir (örn: \`JLM01337-50\` kodunda maliyet 1337.50'dir, \`SO077L\` kodunda maliyet 77'dir, \`AR0120L\` veya \`SO0120L\` kodunda maliyet 120'dir, \`CR065\` kodunda 65'tir). Ürün kodundaki bu gizli maliyeti akıllıca çözümle ve 'wholesalePrice' olarak kaydet.`;
   }
 
   let productTypeInstruction = '';
@@ -192,11 +252,29 @@ async function analyzeBufferWithGemini(
     productTypeInstruction = `\n*** YÖNETİCİ TALİMATI: Bu liste GÖZLÜK CAMI listesidir. productType değerini 'eyeglass_lens' yap.`;
   }
 
-  const prompt = `Sen Türkiye optik gözlük camı ve kontakt lens sektöründe en üst düzey uzman yapay zekasın.
+  // Pre-process images with Tesseract OCR if applicable
+  let ocrText = '';
+  if (finalMimeType.startsWith('image/')) {
+    ocrText = await runOcrOnImage(buffer);
+  }
+
+  let ocrAugmentation = '';
+  if (ocrText) {
+    ocrAugmentation = `\n\n*** GÜÇLÜ OCR METİN DESTEĞİ:
+Görüntüden harici yüksek hassasiyetli bir OCR tarayıcı ile çıkarılmış ham metin aşağıdadır.
+Görseldeki fiyatların, indeks numaralarının (örn. 1.50, 1.60, 1.67) ve ürün isimlerinin doğruluğunu kesinleştirmek için faturadaki/katalogdaki ilgili alanları bu OCR metni ile karşılaştırarak düzelt. OCR okumalarındaki sayısal değerleri esas al (ancak tablo formatı ve sütün düzeni için görsel analize de sadık kal):
+
+--- OCR HAM METİN BAŞLANGICI ---
+${ocrText}
+--- OCR HAM METİN BİTİŞİ ---`;
+  }
+
+  let prompt = `Sen Türkiye optik gözlük camı ve kontakt lens sektöründe en üst düzey uzman yapay zekasın.
 Verilen dosya (${fileName}) bir optik cam veya kontakt lens fiyat listesi, toptan (TFL) / perakende (PFL) katalogu, kampanya tablosu veya PDF broşürüdür.
 ${brandHint ? `Öncelikli Marka: ${brandHint}` : ''}
 ${adminInstruction}
 ${productTypeInstruction}
+${ocrAugmentation}
 
 KRİTİK GÖREV TALİMATLARI:
 1. EKSİKSİZ SATIR SATIR ÇIKARIM (100% EXTRACTION):
@@ -305,6 +383,8 @@ Sadece geçerli bir JSON döndür.`;
           config: {
             responseMimeType: 'application/json',
             temperature: 0.1,
+            maxOutputTokens: 8192,
+            systemInstruction: "Sen profesyonel bir optik katalog veri giriş uzmanısın. Görevin belgedeki TÜM ürünleri, her bir indeks ve kaplama varyasyonuyla birlikte EKSİKSİZ bir JSON dizisi olarak çıkarmaktır. \n\nÖNEMLİ - Markaya Özel Kaplama İsimlendirmeleri:\n1. HOYA için kaplamaları şu standart kısaltmalarla normalize et: 'HVLL' (Hi-Vision LongLife), 'BLC' (BlueControl), 'SHV' (Super Hi-Vision). \n   - DİKKAT: 'LayR' ifadesini sadece belgede açıkça yazıyorsa kullan (genellikle Perfalit, Hilux, Nulux gibi tek odaklı camlarda olur). \n   - Balansis, Daynamic, Lifestyle gibi PROGRESİF camlarda belgede yazmıyorsa 'LayR' ekleme, sadece HVLL veya SHV gibi mevcut kaplamayı yaz.\n2. SEIKO için: 'SRC' (SuperResistantCoat), 'SCC' (SuperCleanCoat), 'RCC' (RoadClearCoat).\n3. ZEISS için: 'DuraVision Platinum', 'DuraVision BlueProtect', 'LotuTec'.\n\nTablolardaki hiçbir satırı atlamadan, en yüksek veri yoğunluğuyla çalışmalısın.",
           }
         });
         const rawText = genResponse.text || '';
@@ -363,7 +443,7 @@ Sadece geçerli bir JSON döndür.`;
         }
 
         const rawLenses = Array.isArray(parsed) ? parsed : (parsed.lenses || []);
-        const fileListType: 'perakende' | 'toptan' | 'kampanya' | 'genel' = 
+        const fileListType: 'perakende' | 'toptan' | 'kampanya' | 'karisik' | 'genel' = 
           parsed.listType || detectedListType;
         
         // Standardize extracted lenses with IDs and apply manager's pricing rules
@@ -396,7 +476,27 @@ Sadece geçerli bir JSON döndür.`;
           let retail = parseTurkishPrice(l.retailPrice);
 
           // Apply admin price mode decision
-          if (priceMode === 'wholesale' || fileListType === 'toptan') {
+          if (priceMode === 'karisik' || fileListType === 'karisik') {
+            const pCode = l.productCode || l.notes || '';
+            if (wholesale === 0 && pCode) {
+              const code = String(pCode).toUpperCase();
+              const jj = code.match(/(?:JLM|LM|KOD|KD)0*(\d{2,5})[-.](\d{2})/);
+              if (jj) {
+                wholesale = parseInt(jj[1], 10) + parseInt(jj[2], 10) / 100;
+              } else {
+                const hidden = code.match(/[A-Z]{1,4}0*(\d{2,4})[A-Z]{0,2}/);
+                if (hidden) {
+                  const extracted = parseInt(hidden[1], 10);
+                  if (retail === 0 || extracted <= retail) {
+                    wholesale = extracted;
+                  }
+                }
+              }
+            }
+            if (wholesale > 0 && retail === 0) {
+              retail = Math.round(wholesale * profitMarkup);
+            }
+          } else if (priceMode === 'wholesale' || fileListType === 'toptan') {
             if (wholesale === 0 && retail > 0) {
               wholesale = retail;
             }
@@ -459,8 +559,14 @@ Sadece geçerli bir JSON döndür.`;
         console.warn(`[Gemini] Model ${modelName} failed (retries left: ${retries}):`, err?.message || err);
         lastError = err;
         
-        // Wait and retry if it's a 503 or 429
-        if (err?.status === 503 || err?.message?.includes('503') || err?.status === 429 || err?.message?.includes('429')) {
+        // Handle 503 Service Unavailable / Overloaded immediately by failing over to the next model
+        if (err?.status === 503 || err?.message?.includes('503')) {
+          console.warn(`[Gemini] Model ${modelName} is currently unavailable (503). Skipping immediately to fallback model...`);
+          break; // Break the retry loop for this model, moving to the next model in modelsToTry
+        }
+
+        // Wait and retry if it's a 429 rate limit
+        if (err?.status === 429 || err?.message?.includes('429')) {
           // If it's a model with zero free tier quota, skip immediately
           if (err?.message?.includes('limit: 0')) {
             console.warn(`[Gemini] Model ${modelName} has 0 free quota. Skipping to next model...`);
@@ -484,14 +590,42 @@ Sadece geçerli bir JSON döndür.`;
             continue;
           }
         }
+
+        // Handle transient network errors (fetch failed, timeout, ECONNRESET, DNS issues, socket hung up)
+        const isNetworkError = 
+          !err?.status && 
+          (err?.message?.toLowerCase().includes('fetch failed') || 
+           err?.message?.toLowerCase().includes('network') || 
+           err?.message?.toLowerCase().includes('timeout') || 
+           err?.message?.toLowerCase().includes('socket') || 
+           err?.message?.toLowerCase().includes('econn') || 
+           err?.message?.toLowerCase().includes('eai_again'));
+
+        if (isNetworkError) {
+          retries--;
+          if (retries >= 0) {
+            const waitTime = 2500 * (3 - retries); // Exponential backoff (2.5s, 5s)
+            console.log(`[Gemini] Transient network error encountered (${err?.message || err}). Retrying ${modelName} in ${waitTime / 1000}s...`);
+            await delay(waitTime);
+            continue;
+          }
+        }
         
-        // Break out of the while loop to move to the next model
+        // Break out of the while loop to move to the next model for other errors
         break;
       }
     }
   }
 
-  throw lastError || new Error('Tüm Gemini modelleri yanıt veremedi.');
+  if (lastError) {
+    const errMsg = (lastError.message || '').toLowerCase();
+    if (errMsg.includes('quota') || errMsg.includes('resource_exhausted') || errMsg.includes('limit exceeded') || errMsg.includes('429')) {
+      throw new Error(`Günlük yapay zeka tarama kotası aşıldı (Quota/Resource Exhausted). Lütfen bir süre sonra tekrar deneyin veya daha küçük dosyalar yükleyin. Günlük kota limitiniz otomatik olarak sıfırlanacaktır.`);
+    }
+    throw lastError;
+  }
+
+  throw new Error('Tüm Gemini modelleri yanıt veremedi.');
 }
 
 // ---------------- API ROUTES ----------------
@@ -509,18 +643,40 @@ app.get('/api/drive/fetch-file', async (req, res) => {
       return res.status(400).json({ success: false, error: 'url parametresi zorunludur.' });
     }
 
-    let targetUrl = rawUrl.trim();
+    const targetUrl = rawUrl.trim();
     // Check if it's a Google Sheet
-    const sheetMatch = rawUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const sheetMatch = targetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     if (sheetMatch && sheetMatch[1]) {
-      targetUrl = `https://docs.google.com/spreadsheets/d/${sheetMatch[1]}/gviz/tq?tqx=out:csv`;
-    } else {
-      const driveFileMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || rawUrl.match(/[?&]id=([a-zA-Z0-9-_]+)/);
-      if (driveFileMatch && driveFileMatch[1]) {
-        targetUrl = `https://drive.google.com/uc?export=download&id=${driveFileMatch[1]}`;
+      const sheetCsvUrl = `https://docs.google.com/spreadsheets/d/${sheetMatch[1]}/gviz/tq?tqx=out:csv`;
+      const response = await fetch(sheetCsvUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          error: `Google E-Tablolara erişilemedi (HTTP ${response.status})`,
+        });
       }
+
+      res.setHeader('Content-Type', 'text/csv');
+      const arrayBuffer = await response.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
     }
 
+    // Check if it's a Google Drive file
+    const driveFileMatch = targetUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || targetUrl.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+    if (driveFileMatch && driveFileMatch[1]) {
+      const fileId = driveFileMatch[1];
+      console.log(`[Proxy Fetch] Downloading file ${fileId} using robust downloader...`);
+      const buffer = await downloadDriveFileBuffer(fileId);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      return res.send(buffer);
+    }
+
+    // Direct fallback fetch for other URLs
     const response = await fetch(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -530,14 +686,14 @@ app.get('/api/drive/fetch-file', async (req, res) => {
     if (!response.ok) {
       return res.status(response.status).json({
         success: false,
-        error: `Google Drive dosyasına erişilemedi (HTTP ${response.status})`,
+        error: `Dosyaya erişilemedi (HTTP ${response.status})`,
       });
     }
 
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
     const arrayBuffer = await response.arrayBuffer();
-    res.send(Buffer.from(arrayBuffer));
+    return res.send(Buffer.from(arrayBuffer));
   } catch (err: any) {
     console.error('Error in proxy fetch-file:', err);
     res.status(500).json({ success: false, error: err.message || 'Dosya indirilemedi.' });
@@ -564,56 +720,405 @@ app.get('/api/drive/files', async (req, res) => {
   }
 });
 
-async function downloadDriveFileBuffer(fileId: string): Promise<Buffer> {
+async function fetchWithTimeout(url: string, options: any = {}, timeoutMs = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+async function downloadDriveFileBuffer(fileId: string, fileName?: string, mimeType?: string): Promise<Buffer> {
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   
-  let downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-  let response = await fetch(downloadUrl, {
-    headers: { 'User-Agent': userAgent },
-    redirect: 'follow',
-  });
+  // 1. Try to load the standard, fully authorized Google Cloud Developer API key from firebase-applet-config.json
+  let googleApiKey = '';
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (config.apiKey && config.apiKey.startsWith('AIzaSy')) {
+        googleApiKey = config.apiKey;
+        console.log('[Drive Download] Loaded Google Developer API Key from firebase-applet-config.json:', googleApiKey.substring(0, 10) + '...');
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Drive Download] Optional firebase-applet-config.json API key reading skipped:', e.message || e);
+  }
 
-  // Check if Google Drive returned a virus scan confirmation HTML page
-  let contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('text/html')) {
-    const htmlText = await response.text();
-    const cookies = response.headers.get('set-cookie') || '';
-    
-    // Look for confirm token
-    const confirmMatch = htmlText.match(/confirm=([0-9a-zA-Z_-]+)/) || htmlText.match(/name="confirm"\s+value="([^"]+)"/);
-    if (confirmMatch) {
-      const confirmToken = confirmMatch[1];
-      const confirmedUrl = `https://drive.google.com/uc?export=download&confirm=${confirmToken}&id=${fileId}`;
-      response = await fetch(confirmedUrl, {
+  const urls: string[] = [];
+
+  // Determine if it is likely a spreadsheet/sheet or doc based on hints
+  const lowerName = (fileName || '').toLowerCase();
+  const lowerMime = (mimeType || '').toLowerCase();
+  const isSheetHint = 
+    lowerMime.includes('spreadsheet') || 
+    lowerMime.includes('excel') || 
+    lowerName.includes('xlsx') || 
+    lowerName.includes('xls') || 
+    lowerName.includes('miks') || 
+    lowerName.includes('tablo') || 
+    lowerName.includes('fiyat') || 
+    lowerName.includes('perakende');
+
+  const isDocHint = 
+    lowerMime.includes('document') || 
+    lowerMime.includes('word') || 
+    lowerName.includes('docx') || 
+    lowerName.includes('doc');
+
+  // If a spreadsheet hint is detected, prioritize spreadsheet export URL
+  if (isSheetHint) {
+    console.log('[Drive Download] Detected Spreadsheet hint. Prioritizing Excel export URLs...');
+    urls.push(`https://docs.google.com/spreadsheets/d/${fileId}/export?format=xlsx`);
+  } else if (isDocHint) {
+    console.log('[Drive Download] Detected Document hint. Prioritizing PDF export URLs...');
+    urls.push(`https://docs.google.com/document/d/${fileId}/export?format=pdf`);
+  }
+
+  // Use the standard Google Cloud Developer API key if found!
+  if (googleApiKey) {
+    console.log('[Drive Download] Adding official Drive API v3 endpoints with Developer API Key...');
+    urls.push(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${googleApiKey}`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=application/pdf&key=${googleApiKey}`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet&key=${googleApiKey}`
+    );
+  }
+
+  // Fallback to Gemini API Key (might be restricted/401 but we still add it just in case)
+  const geminiApiKey = process.env.GEMINI_API_KEY || '';
+  if (geminiApiKey && geminiApiKey !== googleApiKey) {
+    urls.push(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${geminiApiKey}`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=application/pdf&key=${geminiApiKey}`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet&key=${geminiApiKey}`
+    );
+  }
+
+  // 2. High-fidelity view-page and preview-page HTML scraping strategy with redirect-based auto-detection
+  const viewUrls = [
+    `https://drive.google.com/file/d/${fileId}/view`,
+    `https://drive.google.com/file/d/${fileId}/preview`
+  ];
+
+  for (const viewUrl of viewUrls) {
+    try {
+      console.log(`[Drive Download] Strategy 2: Fetching page to scrape secure URL candidates: ${viewUrl}...`);
+      const viewRes = await fetchWithTimeout(viewUrl, {
         headers: {
           'User-Agent': userAgent,
-          ...(cookies ? { Cookie: cookies } : {})
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
         },
-        redirect: 'follow',
-      });
-    } else {
-      // Direct alternate link
-      const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
-      const directRes = await fetch(directUrl, {
-        headers: { 'User-Agent': userAgent },
-        redirect: 'follow',
-      });
-      if (directRes.ok && !(directRes.headers.get('content-type') || '').includes('text/html')) {
-        response = directRes;
+        redirect: 'follow'
+      }, 5000);
+
+      if (viewRes.ok) {
+        const finalUrl = viewRes.url || '';
+        console.log(`[Drive Download] Loaded view page. Final URL after redirects: ${finalUrl}`);
+
+        // Immediate block check: If redirected to Google sign-in page, the file is 100% PRIVATE or restricted
+        if (finalUrl.includes('accounts.google.com') || finalUrl.includes('/ServiceLogin') || finalUrl.includes('/InteractiveLogin')) {
+          throw new Error('Google Drive dosyası gizli (erişim kısıtlı). Lütfen Google Drive\'da dosya paylaşım ayarlarını "Bağlantıya sahip olan herkes - Görüntüleyici" olarak değiştirin.');
+        }
+
+        const htmlText = await viewRes.text();
+        const cookies = viewRes.headers.get('set-cookie') || '';
+
+        // Auto-detect native Google Document types via final URL redirection and immediately export them!
+        if (finalUrl.includes('/spreadsheets/') || finalUrl.includes('docs.google.com/spreadsheets')) {
+          console.log(`[Drive Download] Auto-detected native Google Spreadsheet via redirect. Attempting direct xlsx export...`);
+          const exportUrl = `https://docs.google.com/spreadsheets/d/${fileId}/export?format=xlsx`;
+          try {
+            const expRes = await fetchWithTimeout(exportUrl, {
+              headers: {
+                'User-Agent': userAgent,
+                ...(cookies ? { Cookie: cookies } : {})
+              }
+            }, 6000);
+            if (expRes.ok) {
+              const arrayBuffer = await expRes.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              if (buffer.byteLength > 0) {
+                console.log(`[Drive Download] Successfully downloaded ${buffer.byteLength} bytes of native Spreadsheet.`);
+                return buffer;
+              }
+            }
+          } catch (expErr: any) {
+            console.warn(`[Drive Download] Auto-detected Spreadsheet export failed:`, expErr.message || expErr);
+          }
+        }
+
+        if (finalUrl.includes('/document/') || finalUrl.includes('docs.google.com/document')) {
+          console.log(`[Drive Download] Auto-detected native Google Document via redirect. Attempting direct pdf export...`);
+          const exportUrl = `https://docs.google.com/document/d/${fileId}/export?format=pdf`;
+          try {
+            const expRes = await fetchWithTimeout(exportUrl, {
+              headers: {
+                'User-Agent': userAgent,
+                ...(cookies ? { Cookie: cookies } : {})
+              }
+            }, 6000);
+            if (expRes.ok) {
+              const arrayBuffer = await expRes.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              if (buffer.byteLength > 0) {
+                console.log(`[Drive Download] Successfully downloaded ${buffer.byteLength} bytes of native Document.`);
+                return buffer;
+              }
+            }
+          } catch (expErr: any) {
+            console.warn(`[Drive Download] Auto-detected Document export failed:`, expErr.message || expErr);
+          }
+        }
+
+        if (finalUrl.includes('/presentation/') || finalUrl.includes('docs.google.com/presentation')) {
+          console.log(`[Drive Download] Auto-detected native Google Presentation via redirect. Attempting direct pdf export...`);
+          const exportUrl = `https://docs.google.com/presentation/d/${fileId}/export?format=pdf`;
+          try {
+            const expRes = await fetchWithTimeout(exportUrl, {
+              headers: {
+                'User-Agent': userAgent,
+                ...(cookies ? { Cookie: cookies } : {})
+              }
+            }, 6000);
+            if (expRes.ok) {
+              const arrayBuffer = await expRes.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              if (buffer.byteLength > 0) {
+                console.log(`[Drive Download] Successfully downloaded ${buffer.byteLength} bytes of native Presentation.`);
+                return buffer;
+              }
+            }
+          } catch (expErr: any) {
+            console.warn(`[Drive Download] Auto-detected Presentation export failed:`, expErr.message || expErr);
+          }
+        }
+        
+        // Find any googleusercontent URL (with or without escaped slashes)
+        const matches = htmlText.match(/https?:\/\/[a-zA-Z0-9_./\\-]*googleusercontent[a-zA-Z0-9_./\\-]*/g) || [];
+        const candidateUrls = Array.from(new Set(matches.map(m => m.replace(/\\/g, '')))).filter(m => {
+          return m.includes('securesc') || m.includes('drive-viewer') || m.includes('download') || m.includes('export');
+        });
+
+        console.log(`[Drive Download] Found ${candidateUrls.length} unique candidate download URLs on view page.`);
+
+        for (const secureUrl of candidateUrls) {
+          try {
+            console.log(`[Drive Download] Trying parsed candidate URL: ${secureUrl}`);
+            const downloadRes = await fetchWithTimeout(secureUrl, {
+              headers: {
+                'User-Agent': userAgent,
+                'Accept': '*/*',
+                'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                ...(cookies ? { Cookie: cookies } : {})
+              },
+              redirect: 'follow'
+            }, 5000);
+
+            if (downloadRes.ok) {
+              const finalContentType = downloadRes.headers.get('content-type') || '';
+              if (!finalContentType.includes('text/html')) {
+                const arrayBuffer = await downloadRes.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                if (buffer.byteLength > 0) {
+                  console.log(`[Drive Download] Successfully downloaded ${buffer.byteLength} bytes using parsed: ${secureUrl}`);
+                  return buffer;
+                }
+              }
+            }
+          } catch (innerErr: any) {
+            console.warn(`[Drive Download] Candidate URL fetch failed:`, innerErr.message || innerErr);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[Drive Download] Fetching page ${viewUrl} failed:`, err.message || err);
+      if (err.message && (err.message.includes('gizli') || err.message.includes('kısıtlı') || err.message.includes('paylaşım'))) {
+        throw err; // Escalate access restrictions immediately to avoid useless falling back
       }
     }
   }
 
-  if (!response.ok) {
-    throw new Error(`Google Drive dosyası indirilemedi (HTTP ${response.status})`);
+  // 3. Fallback to view-page session cookies + direct /uc request (with confirm=t)
+  try {
+    const viewUrl = `https://drive.google.com/file/d/${fileId}/view`;
+    console.log(`[Drive Download] Strategy 3: Fetching view page for session cookies...`);
+    const viewRes = await fetchWithTimeout(viewUrl, {
+      headers: { 'User-Agent': userAgent },
+      redirect: 'follow'
+    }, 5000);
+
+    if (viewRes.ok) {
+      const finalUrl = viewRes.url || '';
+      if (finalUrl.includes('accounts.google.com') || finalUrl.includes('/ServiceLogin') || finalUrl.includes('/InteractiveLogin')) {
+        throw new Error('Google Drive dosyası gizli (erişim kısıtlı). Lütfen Google Drive\'da dosya paylaşım ayarlarını "Bağlantıya sahip olan herkes - Görüntüleyici" olarak değiştirin.');
+      }
+
+      const cookies = viewRes.headers.get('set-cookie') || '';
+      if (cookies) {
+        console.log(`[Drive Download] Strategy 3: Download with collected cookies using /uc & confirm=t...`);
+        const downloadRes = await fetchWithTimeout(`https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`, {
+          headers: {
+            'User-Agent': userAgent,
+            'Cookie': cookies,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+          },
+          redirect: 'follow'
+        }, 5000);
+
+        if (downloadRes.ok) {
+          const finalContentType = downloadRes.headers.get('content-type') || '';
+          if (!finalContentType.includes('text/html')) {
+            const arrayBuffer = await downloadRes.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            if (buffer.byteLength > 0) {
+              console.log(`[Drive Download] Successfully downloaded ${buffer.byteLength} bytes using Cookie-based /uc.`);
+              return buffer;
+            }
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Drive Download] Strategy 3 (Cookie-based /uc) failed:', err.message || err);
+    if (err.message && (err.message.includes('gizli') || err.message.includes('kısıtlı') || err.message.includes('paylaşım'))) {
+      throw err;
+    }
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  if (buffer.byteLength === 0) {
-    throw new Error('İndirilen dosya içeriği boş.');
+  // Fallback direct download URLs (tried sequentially without retries to avoid frontend timeout)
+  const fallbackUrls = [
+    `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`,
+    `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`,
+    `https://drive.google.com/uc?export=download&id=${fileId}`,
+    `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
+    `https://docs.google.com/uc?id=${fileId}&export=download`,
+    `https://drive.google.com/uc?id=${fileId}&export=download`,
+    `https://drive.google.com/u/0/uc?id=${fileId}&export=download`,
+    // Native Google Spreadsheet fallback (export to Microsoft Excel format)
+    `https://docs.google.com/spreadsheets/d/${fileId}/export?format=xlsx`,
+    // Native Google Document fallback (export to Adobe PDF format)
+    `https://docs.google.com/document/d/${fileId}/export?format=pdf`,
+    // Native Google Presentation fallback (export to Adobe PDF format)
+    `https://docs.google.com/presentation/d/${fileId}/export?format=pdf`,
+    // Alternative Google Spreadsheet fallback (export to plain CSV format)
+    `https://docs.google.com/spreadsheets/d/${fileId}/export?format=csv`
+  ];
+
+  for (const url of fallbackUrls) {
+    // Prevent duplicate calls if they are already pushed
+    if (urls.includes(url)) continue;
+    urls.push(url);
   }
-  return buffer;
+
+  let lastError: any = null;
+
+  for (const url of urls) {
+    let retries = 0;
+    while (retries >= 0) {
+      try {
+        console.log(`[Drive Download] Attempting download from URL: ${url} (retries left: ${retries})...`);
+        
+        const isApiUrl = url.includes('googleapis.com');
+        const requestHeaders: any = isApiUrl ? {
+          'User-Agent': userAgent,
+        } : {
+          'User-Agent': userAgent,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1'
+        };
+
+        let response = await fetchWithTimeout(url, {
+          headers: requestHeaders,
+          redirect: 'follow',
+        }, 5000);
+
+        let contentType = response.headers.get('content-type') || '';
+        
+        // If Google Drive returns a virus scan or confirmation HTML page
+        if (contentType.includes('text/html') && response.ok) {
+          const cloneRes = response.clone();
+          const htmlText = await cloneRes.text();
+          const cookies = response.headers.get('set-cookie') || '';
+          
+          // Look for confirm token
+          const confirmMatch = htmlText.match(/confirm=([0-9a-zA-Z_-]+)/) || htmlText.match(/name="confirm"\s+value="([^"]+)"/);
+          if (confirmMatch) {
+            const confirmToken = confirmMatch[1];
+            const confirmedUrl = `https://drive.google.com/uc?export=download&confirm=${confirmToken}&id=${fileId}`;
+            console.log(`[Drive Download] Found confirm token ${confirmToken}. Downloading confirmed URL...`);
+            response = await fetchWithTimeout(confirmedUrl, {
+              headers: {
+                ...requestHeaders,
+                ...(cookies ? { Cookie: cookies } : {})
+              },
+              redirect: 'follow',
+            }, 5000);
+            contentType = response.headers.get('content-type') || '';
+          } else {
+            // Check if this HTML is actually an error/block page or login wall
+            if (response.url.includes('accounts.google.com') || (htmlText.includes('Google Drive') && (htmlText.includes('quota') || htmlText.includes('access denied')))) {
+              throw new Error(`Google Drive erişim reddedildi veya kota aşıldı (HTML yanıtı). (Immediate skip)`);
+            }
+          }
+        }
+
+        if (response.ok) {
+          const finalContentType = response.headers.get('content-type') || '';
+          if (response.url.includes('accounts.google.com')) {
+            throw new Error('Google Drive dosyası gizli (erişim kısıtlı). Lütfen Google Drive\'da dosya paylaşım ayarlarını "Bağlantıya sahip olan herkes - Görüntüleyici" olarak değiştirin.');
+          }
+          // If response is still HTML, it means download didn't happen (login wall or access block)
+          if (finalContentType.includes('text/html')) {
+            throw new Error('Erişim engellendi veya oturum açma sayfası döndürüldü. (Immediate skip)');
+          }
+
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          if (buffer.byteLength > 0) {
+            console.log(`[Drive Download] Successfully downloaded ${buffer.byteLength} bytes from: ${url}`);
+            return buffer;
+          }
+        }
+        
+        // Skip retries on failure (like 401, 403, 500, etc.) as we have many fallback URLs
+        throw new Error(`HTTP ${response.status}: ${response.statusText} (Immediate skip)`);
+      } catch (err: any) {
+        console.warn(`[Drive Download] Failed downloading from ${url}:`, err.message || err);
+        lastError = err;
+
+        if (err.message && err.message.includes('Immediate skip')) {
+          break; // break the retry loop, try the next URL in the array immediately
+        }
+
+        retries--;
+        if (retries >= 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+  }
+
+  throw new Error(`Google Drive dosyası indirilemedi. Lütfen dosyanın Google Drive'da paylaşıma açık ('Bağlantıya sahip olan herkes - Görüntüleyici' olarak) ayarlandığından emin olun. (Detay: ${lastError?.message || 'Bağlantı kısıtlandı/500'}).`);
 }
 
 // Scan a specific file from Google Drive
@@ -625,28 +1130,12 @@ app.post('/api/drive/scan-file', async (req, res) => {
     }
 
     const lowerName = (fileName || '').toLowerCase();
-    const isKnownLargeFile = (lowerName.includes('hoya') || lowerName.includes('seiko')) && (lowerName.includes('perakende') || lowerName.includes('toptan'));
-
-    // HOYA & SEIKO catalogs are large (12-24MB), which often exceeds Gemini inlineData limits or causes timeouts
-    if (isKnownLargeFile) {
-      console.log(`[Drive Scanner] Known large catalog file detected (${fileName}). Serving verified fallback catalog.`);
-      const brand = lowerName.includes('hoya') ? 'HOYA' : 'SEIKO';
-      const fallbackLenses = DRIVE_EXTRACTED_LENSES.filter(l => (l.brand || '').toLowerCase().includes(brand.toLowerCase()));
-      if (fallbackLenses.length > 0) {
-        return res.json({
-          success: true,
-          fileId,
-          fileName,
-          count: fallbackLenses.length,
-          brand: brand,
-          modelUsed: 'pre-extracted-catalog',
-          lenses: fallbackLenses,
-        });
-      }
-    }
-
+    // HOYA & SEIKO catalogs are large (12-24MB)
+    // We used to bypass these to avoid timeouts, but now we allow AI scanning with optimized settings.
+    // We only use the fallback if the file is extremely massive or if the AI scan fails.
+    
     console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId}) with priceMode: ${priceMode}...`);
-    const buffer = await downloadDriveFileBuffer(fileId);
+    const buffer = await downloadDriveFileBuffer(fileId, fileName, mimeType);
     console.log(`[Drive Scanner] Downloaded ${fileName} (${buffer.byteLength} bytes). Processing with Gemini...`);
 
     // Guard against files exceeding Gemini inlineData 15MB safe threshold

@@ -13,6 +13,11 @@ export function useFirebaseCatalog() {
     // Real-time catalog
     const qCatalog = query(collection(db, 'catalog'), orderBy('updatedAt', 'desc'));
     const unsubscribeCatalog = onSnapshot(qCatalog, (snapshot) => {
+      if (snapshot.empty) {
+        setLenses([]);
+        setLoading(false);
+        return;
+      }
       const items = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Lens));
       setLenses(items);
       setLoading(false);
@@ -21,6 +26,10 @@ export function useFirebaseCatalog() {
     // Real-time discounts
     const qDiscounts = collection(db, 'discounts');
     const unsubscribeDiscounts = onSnapshot(qDiscounts, (snapshot) => {
+      if (snapshot.empty) {
+        setDiscounts([]);
+        return;
+      }
       const items = snapshot.docs.map(doc => doc.data() as BrandDiscount);
       setDiscounts(items);
     });

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { BrandDiscount } from '../types';
 import { calculateCompoundDiscountRate, normalizeBrandName, isContactLens } from '../utils/pricing';
 import { Sliders, Plus, Trash2, Check, RotateCcw, HelpCircle, ArrowRight, Glasses, Eye, Building2 } from 'lucide-react';
-import { INITIAL_DISCOUNTS } from '../data/initialDiscounts';
 import { getDistributorForBrand, getDistributorInfo, DISTRIBUTORS_LIST } from '../data/distributors';
 
 interface BrandDiscountsViewProps {

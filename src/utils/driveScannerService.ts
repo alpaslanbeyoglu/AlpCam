@@ -11,7 +11,7 @@ export interface ScanProgress {
 }
 
 export interface ScanOptions {
-  priceMode?: 'wholesale' | 'retail' | 'auto';
+  priceMode?: 'wholesale' | 'retail' | 'karisik' | 'auto';
   profitMarkup?: number;
   productTypeHint?: 'eyeglass_lens' | 'contact_lens' | 'auto';
 }

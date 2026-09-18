@@ -18,10 +18,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Catalog Rules - Read is public, write validates structure
+    // Catalog Rules - Read is public, write validates structure, delete is allowed
     match /catalog/{lensId} {
       allow read: if true;
-      allow write: if isValidLens(incoming());
+      allow write: if request.resource == null || isValidLens(incoming());
     }
 
     function isValidLens(data) {

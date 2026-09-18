@@ -84,15 +84,151 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   const [fileFilterDistributor, setFileFilterDistributor] = useState<string>('all');
   const [fileFilterFormat, setFileFilterFormat] = useState<string>('all');
   const [fileSearchTerm, setFileSearchTerm] = useState('');
-  const [fileTypeTab, setFileTypeTab] = useState<'all' | 'eyeglass' | 'contact' | 'toptan' | 'perakende'>('all');
+  const [fileTypeTab, setFileTypeTab] = useState<'all' | 'eyeglass' | 'contact' | 'toptan' | 'kampanyalar' | 'karisik'>('all');
 
   // Admin Price Mode & Product Type decision state
-  const [adminPriceMode, setAdminPriceMode] = useState<'auto' | 'wholesale' | 'retail'>('auto');
+  const [adminPriceMode, setAdminPriceMode] = useState<'auto' | 'wholesale' | 'retail' | 'karisik'>('auto');
   const [profitMarkup, setProfitMarkup] = useState<number>(2.0);
   const [productTypeHint, setProductTypeHint] = useState<'auto' | 'eyeglass_lens' | 'contact_lens'>('auto');
 
   // Scanning state
-  const [subTab, setSubTab] = useState<'files' | 'scanning'>('files');
+  const [subTab, setSubTab] = useState<'files' | 'scanning' | 'manual_json'>('files');
+  const [copied, setCopied] = useState(false);
+  const [manualJsonText, setManualJsonText] = useState<string>('');
+  const [manualJsonError, setManualJsonError] = useState<string | null>(null);
+  const [parsedManualLenses, setParsedManualLenses] = useState<Lens[] | null>(null);
+
+  const jsonFileInputRef = useRef<HTMLInputElement>(null);
+
+  const PROMPT_TEXT = `Aşağıda sana vereceğim optik cam veya kontakt lens fiyat listesi belgesini/görselini satır satır analiz et ve bizim sistemimiz için temiz, geçerli bir JSON dizisi formatına dönüştür. Hiçbir açıklama yazma, sadece geçerli bir JSON dizisi döndür.
+
+Cam kategorileri şunlardan biri olmalıdır: "single_vision" (tek odaklı), "progressive" (progresif), "office" (ofis/yakın-orta), "bifocal" (bifokal), "photochromic" (fotokromik), "drive" (sürüş), "sun_polarized" (güneş/polarize), "contact_lens" (kontakt lens).
+
+İndeksler şunlardan biri olmalıdır: "1.50", "1.53", "1.56", "1.59", "1.60", "1.67", "1.74", "1.80", "1.90".
+
+Kontakt lensler için wearPeriod "daily" veya "monthly", lensType ise "spheric", "toric", "multifocal", "color" olmalıdır.
+
+JSON Şeması:
+[
+  {
+    "brand": "Marka (Örn: Zeiss)",
+    "name": "Model/Ürün Adı (Örn: SmartLife)",
+    "productType": "eyeglass_lens" veya "contact_lens",
+    "category": "single_vision" veya "progressive" veya "photochromic" veya "contact_lens",
+    "index": "1.60",
+    "material": "Hammadde (Örn: Organik)",
+    "coating": "Kaplama (Örn: Duravision Platinum)",
+    "wholesalePrice": 1200,
+    "retailPrice": 2400,
+    "currency": "TRY",
+    "sphRange": "-6.00 / +6.00",
+    "cylMax": 2,
+    "diameter": "70/75",
+    "baseCurve": "8.6",
+    "boxContent": "6'lı Kutu",
+    "wearPeriod": "monthly",
+    "lensType": "spheric",
+    "deliveryType": "stock"
+  }
+]`;
+
+  const handleValidateManualJson = (text: string) => {
+    setManualJsonText(text);
+    if (!text.trim()) {
+      setManualJsonError(null);
+      setParsedManualLenses(null);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) {
+        setManualJsonError('Hata: JSON verisi bir dizi (Array - [ ... ]) formatında olmalıdır.');
+        setParsedManualLenses(null);
+        return;
+      }
+
+      if (parsed.length === 0) {
+        setManualJsonError('Hata: JSON dizisi boş.');
+        setParsedManualLenses(null);
+        return;
+      }
+
+      const invalidItems: string[] = [];
+      const validatedLenses: Lens[] = parsed.map((item: any, idx: number) => {
+        if (!item.brand || !item.name) {
+          invalidItems.push(`Satır ${idx + 1}: "brand" (marka) ve "name" (ürün adı) alanları zorunludur.`);
+        }
+        
+        return {
+          id: item.id || `manual-${idx}-${Date.now()}`,
+          brand: String(item.brand || '').trim(),
+          name: String(item.name || '').trim(),
+          productType: item.productType || (isContactLens(item) ? 'contact_lens' : 'eyeglass_lens'),
+          category: item.category || 'single_vision',
+          index: String(item.index || '1.50'),
+          material: String(item.material || ''),
+          coating: String(item.coating || ''),
+          wholesalePrice: Number(item.wholesalePrice || 0),
+          retailPrice: Number(item.retailPrice || 0),
+          currency: item.currency || 'TRY',
+          sphRange: item.sphRange || '',
+          cylMax: item.cylMax || undefined,
+          diameter: item.diameter || '',
+          baseCurve: item.baseCurve || '',
+          boxContent: item.boxContent || '',
+          wearPeriod: item.wearPeriod || undefined,
+          lensType: item.lensType || undefined,
+          deliveryType: item.deliveryType || 'stock',
+          notes: item.notes || '',
+          isCustom: true,
+          updatedAt: new Date().toISOString(),
+          sourceListType: item.sourceListType || 'genel',
+          sourceFileName: 'Manuel JSON İçe Aktarma'
+        };
+      });
+
+      if (invalidItems.length > 0) {
+        setManualJsonError(`Doğrulama Hatası:\n${invalidItems.slice(0, 3).join('\n')}${invalidItems.length > 3 ? '\n...ve dahası' : ''}`);
+        setParsedManualLenses(null);
+        return;
+      }
+
+      setManualJsonError(null);
+      setParsedManualLenses(validatedLenses);
+    } catch (err: any) {
+      setManualJsonError(`Geçersiz JSON formatı: ${err.message || 'Lütfen parantezleri ve virgülleri kontrol edin.'}`);
+      setParsedManualLenses(null);
+    }
+  };
+
+  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      handleValidateManualJson(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleApplyManualLenses = (mode: 'merge' | 'replace') => {
+    if (!parsedManualLenses || parsedManualLenses.length === 0) return;
+    onUpdateLenses(parsedManualLenses, mode);
+
+    setStatusMessage({
+      type: 'success',
+      message: `Manuel olarak girilen ${parsedManualLenses.length} ürün başarıyla yüklendi ve Firestore veritabanına kaydedildi (${
+        mode === 'replace' ? 'Mevcut katalog sıfırlandı' : 'Mevcut kataloğa eklendi'
+      }).`,
+    });
+
+    setManualJsonText('');
+    setParsedManualLenses(null);
+  };
+
   const [activeFlipbookFile, setActiveFlipbookFile] = useState<ParsedDriveFile | null>(null);
   const [scanningFileId, setScanningFileId] = useState<string | null>(null);
   const [isBatchScanning, setIsBatchScanning] = useState(false);
@@ -160,8 +296,24 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     setDriveFiles((prev) =>
       prev.map((f) => {
         if (f.id === fileId) {
-          const nextType = f.listType === 'toptan' ? 'perakende' : 'toptan';
-          return { ...f, listType: nextType };
+          let nextType: 'toptan' | 'karisik' | 'kampanya' = 'toptan';
+          if (f.listType === 'toptan') {
+            nextType = 'karisik';
+          } else if (f.listType === 'karisik') {
+            nextType = 'kampanya';
+          } else {
+            nextType = 'toptan';
+          }
+
+          // Also sync folderCategory so that filtering updates instantly
+          let folderCategory: 'toptan_fiyatlar' | 'karisik' | 'kampanyalar' = 'toptan_fiyatlar';
+          if (nextType === 'karisik') {
+            folderCategory = 'karisik';
+          } else if (nextType === 'kampanya') {
+            folderCategory = 'kampanyalar';
+          }
+
+          return { ...f, listType: nextType, folderCategory };
         }
         return f;
       })
@@ -209,9 +361,11 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     } else if (fileTypeTab === 'contact') {
       matchTypeTab = isContactFile;
     } else if (fileTypeTab === 'toptan') {
-      matchTypeTab = f.listType === 'toptan';
-    } else if (fileTypeTab === 'perakende') {
-      matchTypeTab = f.listType === 'perakende';
+      matchTypeTab = f.folderCategory === 'toptan_fiyatlar' || f.listType === 'toptan';
+    } else if (fileTypeTab === 'kampanyalar') {
+      matchTypeTab = f.folderCategory === 'kampanyalar' || f.listType === 'kampanya';
+    } else if (fileTypeTab === 'karisik') {
+      matchTypeTab = f.folderCategory === 'karisik' || f.listType === 'karisik';
     }
 
     return matchDistributor && matchBrand && matchFormat && matchSearch && matchTypeTab;
@@ -228,16 +382,6 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
     setScanningFileId(file.id);
     const isContact = file.productType === 'contact_lens' || isContactLens(file.name);
     const effectiveFileMarkup = file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
-    const isRetailList = file.listType === 'perakende' || adminPriceMode === 'retail';
-
-    setStatusMessage({
-      type: 'info',
-      message: `"${file.name}" dosyası Google Drive'dan indiriliyor ve Gemini AI Vision ile taranıyor (Fiyat Modu: ${
-        isRetailList
-          ? 'Perakende Liste - Kâr çarpanı uygulanmaz, listedeki tavsiye satış fiyatı doğrudan aktarılır'
-          : `Toptan Alış + ${effectiveFileMarkup}x Kâr Marjı`
-      })...`,
-    });
 
     const effectivePriceMode =
       adminPriceMode !== 'auto'
@@ -246,7 +390,23 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
         ? 'wholesale'
         : file.listType === 'perakende'
         ? 'retail'
+        : file.listType === 'karisik'
+        ? 'karisik'
         : 'auto';
+
+    const isRetailList = effectivePriceMode === 'retail';
+    const isKarisikList = effectivePriceMode === 'karisik';
+
+    setStatusMessage({
+      type: 'info',
+      message: `"${file.name}" dosyası Google Drive'dan indiriliyor ve Gemini AI Vision ile taranıyor (Fiyat Modu: ${
+        isKarisikList
+          ? 'Karışık Liste (Maliyet Ürün Kodunda, Perakende Açık) - Kod çözücü devrede!'
+          : isRetailList
+          ? 'Perakende Liste - Kâr çarpanı uygulanmaz, listedeki tavsiye satış fiyatı doğrudan aktarılır'
+          : `Toptan Alış + ${effectiveFileMarkup}x Kâr Marjı`
+      })...`,
+    });
 
     const effectiveProductType =
       productTypeHint !== 'auto' ? productTypeHint : isContact ? 'contact_lens' : 'eyeglass_lens';
@@ -309,6 +469,8 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
           ? 'wholesale'
           : file.listType === 'perakende'
           ? 'retail'
+          : file.listType === 'karisik'
+          ? 'karisik'
           : 'auto';
 
       try {
@@ -587,10 +749,21 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
               <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
             )}
           </button>
+          <button
+            onClick={() => setSubTab('manual_json')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition flex items-center justify-center gap-2 ${
+              subTab === 'manual_json'
+                ? 'bg-white text-sky-700 border-b-2 border-sky-600'
+                : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            <span>Manuel JSON Yükle (Sınırsız)</span>
+          </button>
         </div>
 
         {/* DRIVE CONTENT TABS */}
-        {subTab === 'files' ? (
+        {subTab === 'files' && (
           <>
             {/* Drive Folder Connection Bar */}
             <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs">
@@ -640,10 +813,10 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                 </div>
               </div>
             </div>
-
-            {/* Feedback Alert (Partial) - REMOVED AS MOVED TO COMMON AREA */}
           </>
-        ) : (
+        )}
+
+        {subTab === 'scanning' && (
           <div className="p-4 sm:p-6 bg-slate-50 space-y-4">
              <div className="flex items-center gap-3 mb-2">
                 <div className="p-2.5 bg-sky-100 text-sky-600 rounded-xl">
@@ -677,8 +850,6 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                </div>
              )}
 
-             {/* PREVIEW TILE (Last Scanned) - REMOVED AS MOVED TO COMMON AREA */}
-             
              {!isBatchScanning && (
                 <div className="p-8 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
                    <Sparkles className="w-12 h-12 text-sky-200 mx-auto mb-4" />
@@ -687,6 +858,193 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                       Aşağıdaki butona tıklayarak Drive klasöründeki tüm fiyat listelerini AI ile taratıp kataloğunuza anında ekleyebilirsiniz.
                    </p>
                 </div>
+             )}
+          </div>
+        )}
+
+        {subTab === 'manual_json' && (
+          <div className="p-4 sm:p-6 bg-slate-50 space-y-4 animate-in fade-in">
+             <div className="flex flex-col lg:flex-row gap-5">
+               {/* Left column: Instructions and Prompt */}
+               <div className="flex-1 bg-white p-5 rounded-2xl border border-slate-200 space-y-4">
+                 <div className="flex items-center gap-3">
+                   <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                     <Sparkles className="w-5 h-5" />
+                   </div>
+                   <div>
+                     <h3 className="font-bold text-slate-900 text-sm">Ücretsiz Yapay Zeka ile Dönüştürün</h3>
+                     <p className="text-xs text-slate-500 leading-relaxed">
+                       Dosyalarınızı ChatGPT, Claude, Gemini veya DeepSeek gibi dilediğiniz ücretsiz yapay zekaya okutarak saniyeler içinde sistemimizin anlayacağı formata çevirtebilirsiniz.
+                     </p>
+                   </div>
+                 </div>
+
+                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2">
+                   <div className="flex items-center justify-between">
+                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                       <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                       <span>Kopyalanacak Yapay Zeka Komutu (Prompt):</span>
+                     </span>
+                     <button
+                       type="button"
+                       onClick={() => {
+                         navigator.clipboard.writeText(PROMPT_TEXT);
+                         setCopied(true);
+                         setTimeout(() => setCopied(false), 2000);
+                       }}
+                       className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition flex items-center gap-1 border ${
+                         copied
+                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                           : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-600'
+                       }`}
+                     >
+                       {copied ? (
+                         <>
+                           <Check className="w-3 h-3" />
+                           <span>Kopyalandı!</span>
+                         </>
+                       ) : (
+                         <>
+                           <Download className="w-3 h-3" />
+                           <span>Komutu Kopyala</span>
+                         </>
+                       )}
+                     </button>
+                   </div>
+                   <textarea
+                     readOnly
+                     value={PROMPT_TEXT}
+                     className="w-full h-32 p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-mono text-slate-600 focus:outline-none resize-none font-medium"
+                   />
+                   <p className="text-[10px] text-slate-500 leading-tight">
+                     💡 <strong>Nasıl Yapılır?</strong> Yukarıdaki komutu kopyalayın, ChatGPT veya Claude'a yapıştırın ve fiyat listenizin PDF/fotoğrafını ekleyip gönderin. Çıkan JSON kodunu buraya yapıştırın.
+                   </p>
+                 </div>
+               </div>
+
+               {/* Right column: Paste Area and Load */}
+               <div className="flex-1 bg-white p-5 rounded-2xl border border-slate-200 flex flex-col justify-between gap-4">
+                 <div className="space-y-3">
+                   <div className="flex items-center justify-between">
+                     <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                       <Upload className="w-4 h-4 text-sky-600" />
+                       <span>Yapay Zekadan Gelen JSON Kodu:</span>
+                     </span>
+                     
+                     <button
+                       type="button"
+                       onClick={() => jsonFileInputRef.current?.click()}
+                       className="text-xs text-sky-600 hover:text-sky-800 font-bold flex items-center gap-1"
+                     >
+                       <Upload className="w-3.5 h-3.5" />
+                       <span>JSON Dosyası Seç</span>
+                     </button>
+                     <input
+                       ref={jsonFileInputRef}
+                       type="file"
+                       accept=".json"
+                       onChange={handleJsonFileUpload}
+                       className="hidden"
+                     />
+                   </div>
+
+                   <textarea
+                     value={manualJsonText}
+                     onChange={(e) => handleValidateManualJson(e.target.value)}
+                     placeholder="Yapay zekanın ürettiği JSON dizisini buraya yapıştırın... [ { ... } ]"
+                     className="w-full h-44 p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-mono focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                   />
+
+                   {manualJsonError && (
+                     <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2 whitespace-pre-line animate-in fade-in">
+                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                       <span>{manualJsonError}</span>
+                     </div>
+                   )}
+
+                   {parsedManualLenses && parsedManualLenses.length > 0 && (
+                     <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 animate-in fade-in">
+                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                       <div>
+                         <strong>Başarılı!</strong> {parsedManualLenses.length} adet ürün düzgün biçimde doğrulandı.
+                       </div>
+                     </div>
+                   )}
+                 </div>
+
+                 {parsedManualLenses && parsedManualLenses.length > 0 && (
+                   <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                     <button
+                       type="button"
+                       onClick={() => handleApplyManualLenses('merge')}
+                       className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                     >
+                       <Plus className="w-3.5 h-3.5" />
+                       <span>Kataloğa Ekle (Birleştir)</span>
+                     </button>
+                     <button
+                       type="button"
+                       onClick={() => handleApplyManualLenses('replace')}
+                       className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                     >
+                       <Check className="w-3.5 h-3.5" />
+                       <span>Kataloğu Sıfırla ve Bunu Yükle</span>
+                     </button>
+                   </div>
+                 )}
+               </div>
+             </div>
+
+             {/* Live parsed items preview if loaded */}
+             {parsedManualLenses && parsedManualLenses.length > 0 && (
+               <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden mt-2 animate-in fade-in slide-in-from-top-2">
+                 <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                   <span className="text-xs font-bold text-slate-700">İçe Aktarılacak Ürünler Önizlemesi ({parsedManualLenses.length} Ürün):</span>
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setManualJsonText('');
+                       setParsedManualLenses(null);
+                     }}
+                     className="text-[10px] text-rose-600 hover:underline font-bold"
+                   >
+                     Temizle
+                   </button>
+                 </div>
+                 <div className="max-h-56 overflow-y-auto">
+                   <table className="w-full text-left text-xs">
+                     <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                       <tr>
+                         <th className="p-2">Marka</th>
+                         <th className="p-2">Model</th>
+                         <th className="p-2">Tür</th>
+                         <th className="p-2 text-right">Toptan</th>
+                         <th className="p-2 text-right">Perakende</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                       {parsedManualLenses.slice(0, 50).map((l, i) => (
+                         <tr key={i} className="hover:bg-slate-50">
+                           <td className="p-2 font-bold text-sky-800">{l.brand}</td>
+                           <td className="p-2">{l.name}</td>
+                           <td className="p-2">
+                             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
+                               {isContactLens(l) ? 'Kontakt Lens' : `Gözlük Camı (${l.index})`}
+                             </span>
+                           </td>
+                           <td className="p-2 text-right font-mono text-emerald-700 font-bold">{l.wholesalePrice > 0 ? `${l.wholesalePrice} ₺` : '-'}</td>
+                           <td className="p-2 text-right font-mono text-slate-900 font-bold">{l.retailPrice > 0 ? `${l.retailPrice} ₺` : '-'}</td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                   {parsedManualLenses.length > 50 && (
+                     <div className="p-2 bg-slate-50 text-center text-[10px] text-slate-500">
+                       ve {parsedManualLenses.length - 50} adet ürün daha listede...
+                     </div>
+                   )}
+                 </div>
+               </div>
              )}
           </div>
         )}
@@ -715,7 +1073,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                   <Building2 className="w-3.5 h-3.5 text-amber-700" />
                   <span>Liste Fiyat Türü Kararı</span>
                 </label>
-                <div className="grid grid-cols-3 gap-1 text-[11px]">
+                <div className="grid grid-cols-2 gap-1 text-[11px]">
                   <button
                     onClick={() => setAdminPriceMode('auto')}
                     className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
@@ -734,7 +1092,7 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
-                    🏢 Toptan (TFL)
+                    🏢 Toptan
                   </button>
                   <button
                     onClick={() => setAdminPriceMode('retail')}
@@ -746,12 +1104,24 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                   >
                     🏷️ Perakende
                   </button>
+                  <button
+                    onClick={() => setAdminPriceMode('karisik')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold transition border ${
+                      adminPriceMode === 'karisik'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🌀 Karışık (Kodlu)
+                  </button>
                 </div>
                 <p className="text-[10px] text-slate-500">
                   {adminPriceMode === 'wholesale'
                     ? 'Yönetici kararı: Listeler toptan alış maliyetidir. Satış fiyatı kâr çarpanıyla türetilir.'
                     : adminPriceMode === 'retail'
                     ? 'Yönetici kararı: Listeler doğrudan son kullanıcı perakende tavsiye satış fiyatıdır.'
+                    : adminPriceMode === 'karisik'
+                    ? 'Yönetici kararı: Karışık listelerdir. Perakende fiyatı açık yazılıdır, toptan maliyeti kodun içinden otomatik çözülür.'
                     : 'Belge başlığı (PFL/TFL) ve içeriğe göre otomatik belirlenir.'}
                 </p>
               </div>
@@ -1220,69 +1590,98 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
         </div>
 
         {/* Product Type & List Type Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-          <button
-            onClick={() => setFileTypeTab('all')}
-            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition ${
-              fileTypeTab === 'all'
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            Tüm Belgeler ({driveFiles.length})
-          </button>
-          <button
-            onClick={() => setFileTypeTab('eyeglass')}
-            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-              fileTypeTab === 'eyeglass'
-                ? 'bg-blue-600 text-white'
-                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-            }`}
-          >
-            <span>👓 Gözlük Camı Listeleri</span>
-            <span className="opacity-80">
-              ({driveFiles.filter((f) => f.category !== 'contact_lens' && !f.name.toLowerCase().includes('lens')).length})
-            </span>
-          </button>
-          <button
-            onClick={() => setFileTypeTab('contact')}
-            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-              fileTypeTab === 'contact'
-                ? 'bg-teal-600 text-white'
-                : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
-            }`}
-          >
-            <span>👁️ Kontakt Lens Listeleri</span>
-            <span className="opacity-80">
-              ({driveFiles.filter((f) => f.category === 'contact_lens' || f.name.toLowerCase().includes('lens')).length})
-            </span>
-          </button>
-          <button
-            onClick={() => setFileTypeTab('toptan')}
-            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-              fileTypeTab === 'toptan'
-                ? 'bg-amber-600 text-white'
-                : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-            }`}
-          >
-            <span>🏢 Toptan Listeler (TFL)</span>
-            <span className="opacity-80">
-              ({driveFiles.filter((f) => f.listType === 'toptan').length})
-            </span>
-          </button>
-          <button
-            onClick={() => setFileTypeTab('perakende')}
-            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-              fileTypeTab === 'perakende'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-            }`}
-          >
-            <span>🏷️ Perakende Listeler (PFL)</span>
-            <span className="opacity-80">
-              ({driveFiles.filter((f) => f.listType === 'perakende').length})
-            </span>
-          </button>
+        <div className="flex flex-col gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 mt-3">
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <FolderOpen className="w-3.5 h-3.5 text-slate-400" />
+            <span>Google Drive Klasör Yapısı (Aktif Bölüm):</span>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <button
+              onClick={() => setFileTypeTab('all')}
+              className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition border ${
+                fileTypeTab === 'all'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              📁 Tüm Belgeler ({driveFiles.length})
+            </button>
+            <button
+              onClick={() => setFileTypeTab('kampanyalar')}
+              className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 border ${
+                fileTypeTab === 'kampanyalar'
+                  ? 'bg-rose-600 text-white border-rose-600'
+                  : 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100'
+              }`}
+            >
+              <span>🎁 Kampanyalar Klasörü</span>
+              <span className="opacity-80">
+                ({driveFiles.filter((f) => f.folderCategory === 'kampanyalar' || f.listType === 'kampanya').length})
+              </span>
+            </button>
+            <button
+              onClick={() => setFileTypeTab('toptan')}
+              className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 border ${
+                fileTypeTab === 'toptan'
+                  ? 'bg-amber-600 text-white border-amber-600'
+                  : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100'
+              }`}
+            >
+              <span>🏢 Toptan Fiyatlar Klasörü</span>
+              <span className="opacity-80">
+                ({driveFiles.filter((f) => f.folderCategory === 'toptan_fiyatlar' || f.listType === 'toptan').length})
+              </span>
+            </button>
+            <button
+              onClick={() => setFileTypeTab('karisik')}
+              className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 border ${
+                fileTypeTab === 'karisik'
+                  ? 'bg-purple-600 text-white border-purple-600'
+                  : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100'
+              }`}
+              title="Perakende fiyatı açık yazılı, toptan maliyeti ürün kodunda gizli olan karışık listeler"
+            >
+              <span>🌀 Karışık Klasör (Kod Maliyetli)</span>
+              <span className="opacity-80">
+                ({driveFiles.filter((f) => f.folderCategory === 'karisik' || f.listType === 'karisik').length})
+              </span>
+            </button>
+          </div>
+
+          <div className="border-t border-slate-200/60 my-1"></div>
+
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-slate-400" />
+            <span>Ürün Türüne Göre Hızlı Filtrele:</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <button
+              onClick={() => setFileTypeTab('eyeglass')}
+              className={`px-3 py-1.2 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 border ${
+                fileTypeTab === 'eyeglass'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-blue-700 border-slate-200 hover:bg-blue-50'
+              }`}
+            >
+              <span>👓 Gözlük Camı Listeleri</span>
+              <span className="opacity-80">
+                ({driveFiles.filter((f) => f.category !== 'contact_lens' && !f.name.toLowerCase().includes('lens')).length})
+              </span>
+            </button>
+            <button
+              onClick={() => setFileTypeTab('contact')}
+              className={`px-3 py-1.2 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 border ${
+                fileTypeTab === 'contact'
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white text-teal-700 border-slate-200 hover:bg-teal-50'
+              }`}
+            >
+              <span>👁️ Kontakt Lens Listeleri</span>
+              <span className="opacity-80">
+                ({driveFiles.filter((f) => f.category === 'contact_lens' || f.name.toLowerCase().includes('lens')).length})
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Files Grid */}
@@ -1409,12 +1808,32 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
                     )}
                   </div>
 
-                  {/* PRICE DISPLAY / PROFIT MARGIN OPTION */}
+                   {/* PRICE DISPLAY / PROFIT MARGIN OPTION */}
                   {(() => {
-                    const isRetail = file.listType === 'perakende' && adminPriceMode !== 'wholesale';
-                    const isWholesale = file.listType === 'toptan' || adminPriceMode === 'wholesale';
+                    const isKarisik = file.listType === 'karisik' || adminPriceMode === 'karisik';
+                    const isRetail = !isKarisik && file.listType === 'perakende' && adminPriceMode !== 'wholesale';
+                    const isWholesale = !isKarisik && (file.listType === 'toptan' || adminPriceMode === 'wholesale');
                     const effectiveFileMarkup = file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
                     const profitPercent = Math.round((effectiveFileMarkup - 1) * 100);
+
+                    if (isKarisik) {
+                      return (
+                        <div className="p-2.5 rounded-lg border text-xs space-y-1 bg-purple-50/80 border-purple-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-purple-900 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-purple-700" />
+                              <span>Karışık Liste (Kod Maliyetli):</span>
+                            </span>
+                            <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-white text-purple-800 border border-purple-300">
+                              Otomatik Çözücü 🧬
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-purple-800/90 leading-relaxed">
+                            Açıkça yazılı perakende fiyata ek olarak, ürün kodundaki gizli toptan maliyetleri (örn: <code className="font-mono bg-purple-100 px-1 py-0.2 rounded font-bold text-purple-950">JLM240</code> → <strong className="text-purple-950">240 ₺</strong>) otomatik çözer.
+                          </p>
+                        </div>
+                      );
+                    }
 
                     if (isRetail) {
                       return (
