@@ -219,42 +219,59 @@ export const LensCard: React.FC<LensCardProps> = ({
           </div>
         )}
 
-        {/* Features / Coating / Contact Lens Specs */}
-        <div className="text-xs text-slate-500 space-y-1">
+        {/* Production Range & Features Highlight Box */}
+        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
           {isContact ? (
             /* Contact Lens Specific Spec Line */
             <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+              <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
                 <Package className="w-3.5 h-3.5 text-teal-600 shrink-0" />
                 <span className="truncate">{lens.boxContent || '6 Adet / Kutu'}</span>
                 {lens.baseCurve && (
-                  <span className="text-[11px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-100/70 text-teal-900 font-bold">
                     BC: {lens.baseCurve}
                   </span>
                 )}
                 {lens.diameter && (
-                  <span className="text-[11px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-100/70 text-teal-900 font-bold">
                     DIA: {lens.diameter}
                   </span>
                 )}
               </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>{lens.material || 'Silikon Hidrojel'}</span>
-                {lens.sphRange && <span>Diyoptri: {lens.sphRange}</span>}
+              <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
+                <span className="font-medium text-slate-700">{lens.material || 'Silikon Hidrojel'}</span>
+                {lens.sphRange && (
+                  <span className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                    Üretim: {lens.sphRange}
+                  </span>
+                )}
               </div>
             </div>
           ) : (
             /* Optical Eyeglass Lens Spec Line */
-            <>
-              <div className="flex items-center gap-1 text-slate-700 font-medium">
-                <Sparkles className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                <span className="truncate">{lens.coating}</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span className="truncate">{lens.coating || 'Standart Yüksek Kalite Kaplama'}</span>
               </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>{lens.material}</span>
-                {lens.sphRange && <span>Diyoptri: {lens.sphRange}</span>}
+
+              {/* Production Limits (SPH & CYL Range Badge) */}
+              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60 flex-wrap gap-1">
+                <span className="font-medium text-slate-600">{lens.material || 'Organik'}</span>
+                <div className="flex items-center gap-1">
+                  {lens.sphRange && (
+                    <span className="font-bold text-sky-900 bg-sky-100/80 px-1.5 py-0.5 rounded border border-sky-200">
+                      SPH: {lens.sphRange}
+                    </span>
+                  )}
+                  {lens.cylMax !== undefined && (
+                    <span className="font-bold text-indigo-900 bg-indigo-100/80 px-1.5 py-0.5 rounded border border-indigo-200">
+                      CYL: ±{lens.cylMax}
+                    </span>
+                  )}
+                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 

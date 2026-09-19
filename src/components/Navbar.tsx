@@ -249,46 +249,48 @@ export const Navbar: React.FC<NavbarProps> = ({
           {!isDriveWorking && !isAdmin && <Lock className="w-2.5 h-2.5 text-amber-600 shrink-0" />}
         </button>
 
+        {/* Secondary Admin Tools (Subtle Dropdown/Badged Group for Clean Optician Workflow) */}
         {isAdmin && (
-          <button
-            onClick={() => setActiveTab('definitions')}
-            className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
-              activeTab === 'definitions'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-indigo-700 hover:bg-indigo-50 border border-indigo-200/80 bg-indigo-50/50'
-            }`}
-          >
-            <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span>Tanımlar (Firmalar)</span>
-          </button>
-        )}
+          <div className="flex items-center gap-1 pl-2 border-l border-slate-200 shrink-0">
+            <button
+              onClick={() => setActiveTab('definitions')}
+              className={`flex items-center gap-1 px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
+                activeTab === 'definitions'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Tanımlar ve Firma Yönetimi"
+            >
+              <Building2 className="w-3 h-3 shrink-0" />
+              <span>Tanımlar</span>
+            </button>
 
-        {isAdmin && (
-          <button
-            onClick={() => setActiveTab('admin_export')}
-            className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
-              activeTab === 'admin_export'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'text-sky-700 hover:bg-sky-50 border border-sky-200 bg-sky-50/40'
-            }`}
-          >
-            <FileJson className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span>Yönetici Çıktı Merkezi</span>
-          </button>
-        )}
+            <button
+              onClick={() => setActiveTab('admin_export')}
+              className={`flex items-center gap-1 px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
+                activeTab === 'admin_export'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Yönetici Veri ve Çıktı Merkezi"
+            >
+              <FileJson className="w-3 h-3 shrink-0" />
+              <span>Çıktı Merkezi</span>
+            </button>
 
-        {isAdmin && (
-          <button
-            onClick={() => setActiveTab('pdf_scanner')}
-            className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
-              activeTab === 'pdf_scanner'
-                ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-purple-700 hover:bg-purple-50 border border-purple-200 bg-purple-50/40'
-            }`}
-          >
-            <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span>AI Fiyat Listesi Tarayıcı</span>
-          </button>
+            <button
+              onClick={() => setActiveTab('pdf_scanner')}
+              className={`flex items-center gap-1 px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-bold whitespace-nowrap transition ${
+                activeTab === 'pdf_scanner'
+                  ? 'bg-purple-700 text-white shadow-xs'
+                  : 'text-purple-700 hover:bg-purple-50'
+              }`}
+              title="AI Fiyat Listesi Tarayıcısı"
+            >
+              <Sparkles className="w-3 h-3 shrink-0 text-purple-600" />
+              <span>AI Tarayıcı</span>
+            </button>
+          </div>
         )}
 
       </nav>
