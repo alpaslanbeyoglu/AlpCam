@@ -1,9 +1,9 @@
 import React from 'react';
-import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck, Building2, FileJson } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck, Building2, FileJson, Table2 } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner';
-  setActiveTab: (tab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner') => void;
+  activeTab: 'catalog' | 'matrix' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner';
+  setActiveTab: (tab: 'catalog' | 'matrix' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner') => void;
   isCustomerMode: boolean;
   setIsCustomerMode: (val: boolean) => void;
   pairCount: 1 | 2;
@@ -192,6 +192,22 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
           <span>Fiyat Kataloğu</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('matrix')}
+          className={`flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
+            activeTab === 'matrix'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-amber-800 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/60'
+          }`}
+          title="Katalog Fiyat Matrisi (İndeks × Kaplama 2D Tablo Görünümü)"
+        >
+          <Table2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-600" />
+          <span>Fiyat Matrisi</span>
+          <span className="bg-amber-200 text-amber-900 text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase">
+            2D
+          </span>
         </button>
 
         <button

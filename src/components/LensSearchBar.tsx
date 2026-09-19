@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown, Eye, Glasses, Building2, Droplet, LayoutGrid, List } from 'lucide-react';
+import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown, Eye, Glasses, Building2, Droplet, LayoutGrid, List, Table2 } from 'lucide-react';
 import { LensCategory, ProductType } from '../types';
 
 interface LensSearchBarProps {
@@ -29,8 +29,8 @@ interface LensSearchBarProps {
   setSelectedDelivery: (val: 'all' | 'stock' | 'rx') => void;
   sortBy: 'price_asc' | 'price_desc' | 'name_asc' | 'index_asc';
   setSortBy: (val: 'price_asc' | 'price_desc' | 'name_asc' | 'index_asc') => void;
-  viewMode: 'cards' | 'compact';
-  setViewMode: (mode: 'cards' | 'compact') => void;
+  viewMode: 'cards' | 'compact' | 'matrix';
+  setViewMode: (mode: 'cards' | 'compact' | 'matrix') => void;
   showAdvanced: boolean;
   setShowAdvanced: (show: boolean) => void;
   sphCheck: string;
@@ -216,6 +216,13 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             title="Liste Görünümü"
           >
             <List className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('matrix')}
+            className={`p-1.5 rounded-lg transition ${viewMode === 'matrix' ? 'bg-amber-500 text-slate-950 shadow-sm font-bold' : 'text-slate-400 hover:bg-slate-50'}`}
+            title="Katalog Fiyat Matrisi (2D Tablo Görünümü)"
+          >
+            <Table2 className="w-4 h-4" />
           </button>
         </div>
       </div>

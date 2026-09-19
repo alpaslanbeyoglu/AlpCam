@@ -42,6 +42,7 @@ import { PdfScannerView } from './components/PdfScannerView';
 import { AddLensModal } from './components/AddLensModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { BulkEditActions } from './components/BulkEditActions';
+import { LensMatrixView } from './components/LensMatrixView';
 import { useExchangeRates } from './hooks/useExchangeRates';
 
 import {
@@ -78,7 +79,7 @@ export default function App() {
 
   // Navigation
   const [activeTab, setActiveTab] = useState<
-    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner'
+    'catalog' | 'matrix' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner'
   >('catalog');
 
   // App Settings
@@ -107,7 +108,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedDelivery, setSelectedDelivery] = useState<'all' | 'stock' | 'rx'>('all');
   const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'name_asc' | 'index_asc'>('price_asc');
-  const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'compact' | 'matrix'>('cards');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sphCheck, setSphCheck] = useState('');
   const [cylCheck, setCylCheck] = useState('');
@@ -544,7 +545,7 @@ export default function App() {
   ]);
 
   // Add to active custom list
-  const handleAddToList = async (lens: Lens, targetListId?: string, customPrice?: number) => {
+  const handleAddToList = async (lens: Lens, targetListId?: string, customPrice?: number, specificQuantity?: 1 | 2) => {
     let listId = targetListId;
     let currentLists = [...customLists];
 
@@ -568,7 +569,7 @@ export default function App() {
         id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         lensId: lens.id,
         lensSnapshot: lens,
-        quantity: pairCount,
+        quantity: specificQuantity ?? pairCount,
         customRetailPrice: customPrice,
       };
       const updatedList = {
@@ -790,6 +791,20 @@ export default function App() {
                   Filtreleri Temizle
                 </button>
               </div>
+            ) : viewMode === 'matrix' ? (
+              /* 2D Optical Matrix View */
+              <LensMatrixView
+                lenses={filteredLenses}
+                brandDiscounts={brandDiscounts}
+                pairCount={pairCount}
+                setPairCount={setPairCount}
+                isCustomerMode={isCustomerMode}
+                isAdmin={isAdmin}
+                onOpenDetails={(l) => setDetailLens(l)}
+                onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
+                isAddedToActiveList={(id) => isLensInActiveList(id)}
+                initialBrand={selectedBrand !== 'all' ? selectedBrand : undefined}
+              />
             ) : viewMode === 'cards' ? (
               /* Cards View */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
@@ -868,7 +883,23 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB 2: CUSTOM LISTS */}
+        {/* TAB 2: 2D CATALOG PRICE MATRIX */}
+        <div className={activeTab === 'matrix' ? 'block' : 'hidden'}>
+          <LensMatrixView
+            lenses={lenses}
+            brandDiscounts={brandDiscounts}
+            pairCount={pairCount}
+            setPairCount={setPairCount}
+            isCustomerMode={isCustomerMode}
+            isAdmin={isAdmin}
+            onOpenDetails={(l) => setDetailLens(l)}
+            onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
+            isAddedToActiveList={(id) => isLensInActiveList(id)}
+            initialBrand={selectedBrand !== 'all' ? selectedBrand : 'HOYA'}
+          />
+        </div>
+
+        {/* TAB 3: CUSTOM LISTS */}
         <div className={activeTab === 'custom_lists' ? 'block' : 'hidden'}>
           <CustomListsView
             customLists={customLists}
