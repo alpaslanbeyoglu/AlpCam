@@ -85,6 +85,7 @@ export interface CustomList {
   updatedAt: string;
   items: CustomListItem[];
   patientName?: string;
+  opticianStoreName?: string; // Optisyen / Mağaza Adı (örn: "Odak Optik", "NetGöz Optik")
   targetProfitMargin?: number;
 }
 

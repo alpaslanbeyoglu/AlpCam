@@ -155,28 +155,40 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
     onUpdateLists(updated);
   };
 
+  // Update Patient / Store details on active list
+  const handleUpdateStoreDetails = (storeName: string, patientName: string) => {
+    if (!activeList) return;
+    const updated = customLists.map((l) =>
+      l.id === activeList.id
+        ? { ...l, opticianStoreName: storeName, patientName: patientName, updatedAt: new Date().toISOString() }
+        : l
+    );
+    onUpdateLists(updated);
+  };
+
   // Generate WhatsApp message (WITHOUT WHOLESALE DATA - 100% Safe for Customers!)
   const generateWhatsAppText = () => {
     if (!activeList || activeList.items.length === 0) return '';
-    let text = `👓 *OPTİK CAM FİYAT TEKLİFİ*\n`;
-    text += `📋 *Liste:* ${activeList.name}\n`;
+    const storeHeader = activeList.opticianStoreName ? `🏬 *${activeList.opticianStoreName.toUpperCase()}*\n` : '';
+    let text = `${storeHeader}👓 *OPTİK CAM VE LENS FİYAT TEKLİFİ*\n`;
+    text += `📋 *Teklif / Liste:* ${activeList.name}\n`;
     if (activeList.patientName) {
-      text += `👤 *Hasta / Müşteri:* ${activeList.patientName}\n`;
+      text += `👤 *Sayın Hasta / Müşteri:* ${activeList.patientName}\n`;
     }
     text += `📅 *Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n\n`;
 
     activeList.items.forEach((item, index) => {
       const lens = item.lensSnapshot;
-      const qText = item.quantity === 2 ? 'Çift Cam' : 'Tek Cam';
+      const qText = item.quantity === 2 ? 'Çift (2 Adet)' : 'Tek (1 Adet)';
       const price = item.customRetailPrice ?? (lens.retailPrice * item.quantity);
       text += `${index + 1}. *${lens.brand} - ${lens.name}*\n`;
-      text += `   • İndeks: ${lens.index} | Kaplama: ${lens.coating}\n`;
+      text += `   • Özellikler: ${lens.coating || 'Yüksek Kalite Kaplama'} | ${lens.index} İndeks\n`;
       text += `   • Miktar: ${qText}\n`;
       text += `   • Satış Fiyatı: ${formatCurrency(price, lens.currency)}\n\n`;
     });
 
-    text += `*Toplam Tutar: ${formatCurrency(listFinancials.totalRetail)}*\n`;
-    text += `_Tüm camlarımız orijinal garanti belgesi ve temizleme kiti ile teslim edilir._`;
+    text += `*TOPLAM TEKLİF TUTARI: ${formatCurrency(listFinancials.totalRetail)}*\n\n`;
+    text += `_Tüm camlarımız %100 orijinal, barkodlu ve garanti belgesi ile teslim edilir._`;
     return text;
   };
 
@@ -206,15 +218,18 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
       return;
     }
 
+    const storeTitle = activeList.opticianStoreName ? activeList.opticianStoreName.toUpperCase() : 'OPTİK MAĞAZASI TEKLİFİ';
+
     let html = `<!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>${activeList.name} - Optik Fiyat Teklifi ve Ürün Rehberi</title>
+  <title>${activeList.name} - ${storeTitle}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; padding: 30px; margin: 0; background: #fff; }
     .header { border-bottom: 2px solid #0284c7; padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
-    .title { font-size: 20px; font-weight: 800; color: #0369a1; margin: 0 0 5px 0; }
+    .store-name { font-size: 22px; font-weight: 900; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px 0; }
+    .title { font-size: 14px; font-weight: 700; color: #475569; margin: 0 0 5px 0; }
     .subtitle { font-size: 12px; color: #64748b; }
     .meta { font-size: 12px; text-align: right; color: #475569; }
     .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -234,9 +249,10 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
 <body>
   <div class="header">
     <div>
-      <h1 class="title">👓 OPTİK FİYAT TEKLİFİ VE ÜRÜN REHBERİ</h1>
-      <div class="subtitle">Özel Liste / Teklif: <strong>${activeList.name}</strong></div>
-      ${activeList.patientName ? `<div class="subtitle">Hasta / Müşteri: <strong>${activeList.patientName}</strong></div>` : ''}
+      <h1 class="store-name">🏬 ${storeTitle}</h1>
+      <div class="title">👓 OPTİK CAM VE LENS FİYAT TEKLİFİ</div>
+      <div class="subtitle">Teklif / Paket: <strong>${activeList.name}</strong></div>
+      ${activeList.patientName ? `<div class="subtitle">Müşteri / Hasta: <strong>${activeList.patientName}</strong></div>` : ''}
     </div>
     <div class="meta">
       <div>Tarih: ${new Date().toLocaleDateString('tr-TR')}</div>
@@ -443,13 +459,37 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
       {/* Active List Content */}
       {activeList && (
         <div className="space-y-3">
+          {/* Optician Store Name & Patient Input Bar */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Optik Mağaza / Firma Adı (Teklif Başlığı):</label>
+              <input
+                type="text"
+                value={activeList.opticianStoreName || ''}
+                onChange={(e) => handleUpdateStoreDetails(e.target.value, activeList.patientName || '')}
+                placeholder="Örn: NetGöz Optik, Odak Optik"
+                className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Müşteri / Hasta Adı Soyadı:</label>
+              <input
+                type="text"
+                value={activeList.patientName || ''}
+                onChange={(e) => handleUpdateStoreDetails(activeList.opticianStoreName || '', e.target.value)}
+                placeholder="Örn: Mehmet Yılmaz"
+                className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
+              />
+            </div>
+          </div>
+
           {/* List Title and Delete */}
           <div className="flex items-center justify-between px-1">
             <div>
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span>{activeList.name}</span>
                 <span className="text-xs font-normal text-slate-500">
-                  ({activeList.items.length} cam eklendi)
+                  ({activeList.items.length} cam/lens eklendi)
                 </span>
               </h2>
             </div>
