@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { db, collection, getDocs, setDoc, doc, onSnapshot, query, orderBy } from '../lib/firebase';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { cleanUndefined } from '../utils/storage';
+import { smartMergeCatalog, SmartMergeResult } from '../utils/productMatcher';
 
 export function useFirebaseCatalog() {
   const [lenses, setLenses] = useState<Lens[]>([]);
@@ -52,13 +53,42 @@ export function useFirebaseCatalog() {
     await setDoc(doc(db, 'catalog', lens.id), cleanUndefined({ ...lens, updatedAt: new Date().toISOString() }));
   };
 
-  const saveLenses = async (newItems: Lens[], mode: 'replace' | 'merge') => {
+  const saveLenses = async (newItems: Lens[], mode: 'replace' | 'merge'): Promise<SmartMergeResult> => {
+    const { deleteDoc, doc: firestoreDoc } = await import('firebase/firestore');
+
     if (mode === 'replace') {
-      // For replace, we might want to delete old ones first, but that's risky. 
-      // Better to just batch set the new ones.
+      // Clear catalog and save all new items
+      const snap = await getDocs(collection(db, 'catalog'));
+      const delPromises = snap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(delPromises);
+
+      const savePromises = newItems.map(item => saveLens(item));
+      await Promise.all(savePromises);
+
+      return {
+        merged: newItems,
+        updatedCount: 0,
+        addedCount: newItems.length,
+        supersededOldIds: [],
+      };
     }
-    const promises = newItems.map(item => saveLens(item));
-    await Promise.all(promises);
+
+    // Smart Merge: update existing products with new prices and delete superseded/duplicate records
+    const mergeResult = smartMergeCatalog(lenses, newItems);
+
+    // 1. Delete superseded duplicate documents from Firestore
+    if (mergeResult.supersededOldIds.length > 0) {
+      const deletePromises = mergeResult.supersededOldIds.map(id =>
+        deleteDoc(firestoreDoc(db, 'catalog', id)).catch(() => {})
+      );
+      await Promise.all(deletePromises);
+    }
+
+    // 2. Save/Update modified and new lenses
+    const savePromises = mergeResult.merged.map(item => saveLens(item));
+    await Promise.all(savePromises);
+
+    return mergeResult;
   };
 
   const deleteLens = async (id: string) => {

@@ -4,6 +4,7 @@ import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../
 import { parseCostFromCode } from '../utils/costCodeParser';
 import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2, Edit2, Save, Tag, Barcode } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
+import { HoyaProgressiveTableModal } from './HoyaProgressiveTableModal';
 
 interface LensDetailModalProps {
   lens: Lens | null;
@@ -38,6 +39,7 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
   const [customPriceInput, setCustomPriceInput] = useState<string>('');
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showHoyaTable, setShowHoyaTable] = useState(false);
 
   // Editing States for Admin Corrections
   const [isEditing, setIsEditing] = useState(false);
@@ -195,6 +197,17 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
           </div>
           
           <div className="flex items-center gap-2 shrink-0">
+            {lens.brand && lens.brand.toLowerCase().includes('hoya') && (
+              <button
+                onClick={() => setShowHoyaTable(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1 transition shadow-xs"
+                title="Hoya Resmi Progresif Kıyaslama Tablosu"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                <span>Kıyaslama Tablosu</span>
+              </button>
+            )}
+
             {isAdmin && onUpdateLens && (
               <button
                 onClick={() => {
@@ -992,6 +1005,13 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Hoya Progressive Comparison Modal */}
+      <HoyaProgressiveTableModal
+        isOpen={showHoyaTable}
+        onClose={() => setShowHoyaTable(false)}
+        initialSeries={lens.name}
+      />
     </div>
   );
 };

@@ -42,7 +42,8 @@ import { PdfScannerView } from './components/PdfScannerView';
 import { AddLensModal } from './components/AddLensModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { BulkEditActions } from './components/BulkEditActions';
-import { LensMatrixView } from './components/LensMatrixView';
+import { UnifiedSeriesCard } from './components/UnifiedSeriesCard';
+import { ContactLensCard } from './components/ContactLensCard';
 import { useExchangeRates } from './hooks/useExchangeRates';
 
 import {
@@ -79,7 +80,7 @@ export default function App() {
 
   // Navigation
   const [activeTab, setActiveTab] = useState<
-    'catalog' | 'matrix' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner'
+    'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner'
   >('catalog');
 
   // App Settings
@@ -108,7 +109,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedDelivery, setSelectedDelivery] = useState<'all' | 'stock' | 'rx'>('all');
   const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'name_asc' | 'index_asc'>('price_asc');
-  const [viewMode, setViewMode] = useState<'cards' | 'compact' | 'matrix'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sphCheck, setSphCheck] = useState('');
   const [cylCheck, setCylCheck] = useState('');
@@ -163,9 +164,11 @@ export default function App() {
   const handleDriveAutoSync = async () => {
     if (!driveConfig.sourceUrl) return;
 
-    // Folders cannot be parsed as a single tabular sheet
     const isFolder = driveConfig.sourceUrl.includes('/folders/') || driveConfig.sourceType === 'drive_folder';
     if (isFolder) {
+      showToast('Google Drive klasörü kontrol ediliyor...');
+      await syncDrive(driveConfig.sourceUrl);
+      showToast('Google Drive klasör kontrolü tamamlandı.');
       return;
     }
 
@@ -174,16 +177,17 @@ export default function App() {
       const buffer = await fetchFromDriveUrl(driveConfig.sourceUrl);
       const res = parseExcelOrCsvData(buffer);
       if (res.success && res.lenses.length > 0) {
-        await saveLenses(res.lenses, 'replace');
+        await saveLenses(res.lenses, 'merge');
         setDriveConfig((prev) => ({
           ...prev,
           lastSyncTime: new Date().toISOString(),
           lastSyncItemCount: res.lenses.length,
         }));
-        showToast(`Google Drive'dan ${res.lenses.length} ürün otomatik güncellendi`);
+        showToast(`Google Drive'dan ${res.lenses.length} ürün güncellendi.`);
       }
     } catch (err: any) {
-      console.warn('Auto sync skipped/unavailable:', err?.message || err);
+      console.warn('Auto sync error:', err?.message || err);
+      showToast('Google Drive dosyası senkronize edilemedi.');
     } finally {
       setIsSyncing(false);
     }
@@ -544,6 +548,31 @@ export default function App() {
     exchangeRates,
   ]);
 
+  // Group filtered lenses into unified Series Family cards for Master Cards view (excluding contact lenses)
+  const groupedSeriesCards = useMemo(() => {
+    const map = new Map<string, { brand: string; seriesName: string; lenses: Lens[] }>();
+    filteredLenses.forEach((l) => {
+      if (l.productType === 'contact_lens') return;
+      const brand = l.brand.trim();
+      const name = l.name.trim();
+      let cleanName = name;
+      if (cleanName.toLowerCase().startsWith(brand.toLowerCase())) {
+        cleanName = cleanName.substring(brand.length).trim();
+      }
+      const words = cleanName.split(/\s+/);
+      let series = words[0];
+      if (words.length > 1 && !/^\d\.\d+/.test(words[1]) && !['1.50','1.53','1.56','1.60','1.67','1.74'].includes(words[1])) {
+        series = `${words[0]} ${words[1]}`;
+      }
+      const key = `${brand}___${series || 'General'}`;
+      if (!map.has(key)) {
+        map.set(key, { brand, seriesName: series || name, lenses: [] });
+      }
+      map.get(key)!.lenses.push(l);
+    });
+    return Array.from(map.values());
+  }, [filteredLenses]);
+
   // Add to active custom list
   const handleAddToList = async (lens: Lens, targetListId?: string, customPrice?: number, specificQuantity?: 1 | 2) => {
     let listId = targetListId;
@@ -586,42 +615,20 @@ export default function App() {
     if (mode === 'replace') {
       await clearCatalog();
       await saveLenses(newLenses, 'replace');
+      showToast(`Katalog sıfırlandı ve ${newLenses.length} yeni ürün yüklendi.`);
     } else {
-      // Merge unique by specific key, but update prices if TFL/PFL lists are mixed
-      const mergedMap = new Map<string, Lens>();
-      
-      // First, add all existing lenses
-      lenses.forEach((l) => {
-        const key = `${l.brand}_${l.name}_${l.index}_${l.deliveryType}`.toLowerCase().trim();
-        mergedMap.set(key, l);
-      });
-
-      // Then process new lenses
-      newLenses.forEach((newLens) => {
-        const key = `${newLens.brand}_${newLens.name}_${newLens.index}_${newLens.deliveryType}`.toLowerCase().trim();
-        const existing = mergedMap.get(key);
-        
-        if (existing) {
-          // If the lens exists, intelligently merge the pricing
-          const updated = { ...existing };
-          
-          // TFL/Toptan sets wholesalePrice
-          if (newLens.sourceListType === 'toptan' || newLens.wholesalePrice > 0) {
-            updated.wholesalePrice = newLens.wholesalePrice > 0 ? newLens.wholesalePrice : updated.wholesalePrice;
-          }
-          // PFL/Perakende sets retailPrice
-          if (newLens.sourceListType === 'perakende' || newLens.retailPrice > 0) {
-            updated.retailPrice = newLens.retailPrice > 0 ? newLens.retailPrice : updated.retailPrice;
-          }
-          
-          mergedMap.set(key, updated);
+      const result = await saveLenses(newLenses, 'merge');
+      if (result) {
+        if (result.updatedCount > 0 && result.addedCount > 0) {
+          showToast(`${result.updatedCount} ürünün fiyatı güncellendi, ${result.addedCount} yeni ürün eklendi.`);
+        } else if (result.updatedCount > 0) {
+          showToast(`${result.updatedCount} ürünün fiyatı güncel liste ile yenilendi.`);
         } else {
-          // It's a brand new lens
-          mergedMap.set(key, newLens);
+          showToast(`${result.addedCount || newLenses.length} yeni ürün kataloğa eklendi.`);
         }
-      });
-
-      await saveLenses(Array.from(mergedMap.values()), 'merge');
+      } else {
+        showToast(`${newLenses.length} ürün kataloğa işlendi.`);
+      }
     }
   };
 
@@ -791,38 +798,41 @@ export default function App() {
                   Filtreleri Temizle
                 </button>
               </div>
-            ) : viewMode === 'matrix' ? (
-              /* 2D Optical Matrix View */
-              <LensMatrixView
-                lenses={filteredLenses}
-                brandDiscounts={brandDiscounts}
-                pairCount={pairCount}
-                setPairCount={setPairCount}
-                isCustomerMode={isCustomerMode}
-                isAdmin={isAdmin}
-                onOpenDetails={(l) => setDetailLens(l)}
-                onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
-                isAddedToActiveList={(id) => isLensInActiveList(id)}
-                initialBrand={selectedBrand !== 'all' ? selectedBrand : undefined}
-              />
             ) : viewMode === 'cards' ? (
-              /* Cards View */
+              /* Cards View: Unified Series for Optical Lenses & ContactLensCard for Contact Lenses */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                {filteredLenses.map((lens) => (
-                  <LensCard
-                    key={lens.id}
-                    lens={lens}
+                {groupedSeriesCards.map((group) => (
+                  <UnifiedSeriesCard
+                    key={`${group.brand}-${group.seriesName}`}
+                    seriesName={group.seriesName}
+                    brand={group.brand}
+                    lensesInSeries={group.lenses}
                     brandDiscounts={brandDiscounts}
                     pairCount={pairCount}
                     isCustomerMode={isCustomerMode}
                     catalog={lenses}
                     onOpenDetails={(l) => setDetailLens(l)}
-                    onAddToList={(l) => handleAddToList(l)}
-                    isAddedToActiveList={isLensInActiveList(lens.id)}
+                    onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
+                    isAddedToActiveList={(id) => isLensInActiveList(id)}
                     isAdmin={isAdmin}
-                    onDeleteLens={handleDeleteLens}
                   />
                 ))}
+                {filteredLenses
+                  .filter((l) => l.productType === 'contact_lens')
+                  .map((lens) => (
+                    <ContactLensCard
+                      key={lens.id}
+                      lens={lens}
+                      brandDiscounts={brandDiscounts}
+                      pairCount={pairCount}
+                      isCustomerMode={isCustomerMode}
+                      catalog={lenses}
+                      onOpenDetails={(l) => setDetailLens(l)}
+                      onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
+                      isAddedToActiveList={isLensInActiveList(lens.id)}
+                      isAdmin={isAdmin}
+                    />
+                  ))}
               </div>
             ) : (
               /* Compact List View */
@@ -883,21 +893,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB 2: 2D CATALOG PRICE MATRIX */}
-        <div className={activeTab === 'matrix' ? 'block' : 'hidden'}>
-          <LensMatrixView
-            lenses={lenses}
-            brandDiscounts={brandDiscounts}
-            pairCount={pairCount}
-            setPairCount={setPairCount}
-            isCustomerMode={isCustomerMode}
-            isAdmin={isAdmin}
-            onOpenDetails={(l) => setDetailLens(l)}
-            onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
-            isAddedToActiveList={(id) => isLensInActiveList(id)}
-            initialBrand={selectedBrand !== 'all' ? selectedBrand : 'HOYA'}
-          />
-        </div>
 
         {/* TAB 3: CUSTOM LISTS */}
         <div className={activeTab === 'custom_lists' ? 'block' : 'hidden'}>

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Lens, BrandDiscount } from '../types';
 import { calculateLensFinancials, formatCurrency } from '../utils/pricing';
+import { HoyaProgressiveTableModal } from './HoyaProgressiveTableModal';
 
 interface LensMatrixViewProps {
   lenses: Lens[];
@@ -135,6 +136,7 @@ export const LensMatrixView: React.FC<LensMatrixViewProps> = ({
 
   // Selected cell for Quick Action drawer/modal
   const [activeCellLens, setActiveCellLens] = useState<Lens | null>(null);
+  const [showHoyaTable, setShowHoyaTable] = useState(false);
 
   // Group lenses into distinct sub-tables (like the catalog sheet in the user's image)
   const matrixGroups = useMemo(() => {
@@ -405,6 +407,18 @@ export const LensMatrixView: React.FC<LensMatrixViewProps> = ({
                   Tek Cam
                 </button>
               </div>
+            )}
+
+            {/* Hoya Progressive Comparison Table Button if Hoya brand */}
+            {selectedBrand.toLowerCase().includes('hoya') && (
+              <button
+                onClick={() => setShowHoyaTable(true)}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs shrink-0 animate-pulse"
+                title="Hoya Resmi Progresif Kıyaslama Tablosu"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                <span>HOYA Progresif Tablosu</span>
+              </button>
             )}
 
             {/* Print Button */}
@@ -803,6 +817,13 @@ export const LensMatrixView: React.FC<LensMatrixViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Hoya Progressive Comparison Modal */}
+      <HoyaProgressiveTableModal
+        isOpen={showHoyaTable}
+        onClose={() => setShowHoyaTable(false)}
+        initialSeries={selectedSeries}
+      />
     </div>
   );
 };

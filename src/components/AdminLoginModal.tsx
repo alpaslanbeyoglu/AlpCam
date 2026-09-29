@@ -222,9 +222,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                   placeholder="Yönetici şifrenizi girin..."
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold text-base tracking-widest focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
                 />
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  (Varsayılan ilk giriş şifresi: <code className="font-bold text-slate-700">1923</code>)
-                </span>
+
               </div>
 
               <div className="pt-2 flex items-center gap-2">
