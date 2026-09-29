@@ -166,11 +166,30 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
     onUpdateLists(updated);
   };
 
+  // Helper to determine if a lens is a contact lens
+  const isContactProduct = (lens: Lens) => {
+    return (
+      lens.productType === 'contact_lens' ||
+      lens.category === 'contact_lens' ||
+      Boolean(lens.wearPeriod || lens.baseCurve || lens.boxContent || lens.lensType)
+    );
+  };
+
   // Generate WhatsApp message (WITHOUT WHOLESALE DATA - 100% Safe for Customers!)
   const generateWhatsAppText = () => {
     if (!activeList || activeList.items.length === 0) return '';
     const storeHeader = activeList.opticianStoreName ? `🏬 *${activeList.opticianStoreName.toUpperCase()}*\n` : '';
-    let text = `${storeHeader}👓 *OPTİK CAM VE LENS FİYAT TEKLİFİ*\n`;
+    
+    const hasContact = activeList.items.some(i => isContactProduct(i.lensSnapshot));
+    const hasEyeglass = activeList.items.some(i => !isContactProduct(i.lensSnapshot));
+    const isAllContact = hasContact && !hasEyeglass;
+    const isAllEyeglass = !hasContact && hasEyeglass;
+
+    let offerTitle = '👓 *OPTİK CAM VE LENS FİYAT TEKLİFİ*';
+    if (isAllContact) offerTitle = '👁️ *KONTAKT LENS FİYAT TEKLİFİ*';
+    else if (isAllEyeglass) offerTitle = '👓 *OPTİK CAM FİYAT TEKLİFİ*';
+
+    let text = `${storeHeader}${offerTitle}\n`;
     text += `📋 *Teklif / Liste:* ${activeList.name}\n`;
     if (activeList.patientName) {
       text += `👤 *Sayın Hasta / Müşteri:* ${activeList.patientName}\n`;
@@ -178,17 +197,44 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
     text += `📅 *Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n\n`;
 
     activeList.items.forEach((item, index) => {
-      const lens = item.lensSnapshot;
-      const qText = item.quantity === 2 ? 'Çift (2 Adet)' : 'Tek (1 Adet)';
+      const lens = sanitizeLens(item.lensSnapshot);
+      const isContact = isContactProduct(lens);
+      const qText = isContact
+        ? (item.quantity === 2 ? '2 Kutu (Çift Göz)' : '1 Kutu (Tek Göz)')
+        : (item.quantity === 2 ? 'Çift Cam (2 Adet)' : 'Tek Cam (1 Adet)');
+      
+      const deliveryText = lens.deliveryType === 'stock'
+        ? (isContact ? 'Stok Lens' : 'Stok Cam')
+        : (isContact ? 'Özel Sipariş / RX Lens' : 'RX Özel Üretim');
+
       const price = item.customRetailPrice ?? (lens.retailPrice * item.quantity);
       text += `${index + 1}. *${lens.brand} - ${lens.name}*\n`;
-      text += `   • Özellikler: ${lens.coating || 'Yüksek Kalite Kaplama'} | ${lens.index} İndeks\n`;
+      if (isContact) {
+        const specs = [
+          lens.wearPeriod,
+          lens.boxContent,
+          lens.baseCurve ? `BC: ${lens.baseCurve}` : '',
+          lens.diameter ? `DIA: ${lens.diameter}` : '',
+          lens.material
+        ].filter(Boolean).join(' | ') || lens.coating || 'Orijinal Ambalaj';
+        text += `   • Özellikler: ${specs} (${deliveryText})\n`;
+      } else {
+        text += `   • Özellikler: ${lens.coating || 'Yüksek Kalite Kaplama'} | ${lens.index} İndeks (${deliveryText})\n`;
+      }
       text += `   • Miktar: ${qText}\n`;
       text += `   • Satış Fiyatı: ${formatCurrency(price, lens.currency)}\n\n`;
     });
 
     text += `*TOPLAM TEKLİF TUTARI: ${formatCurrency(listFinancials.totalRetail)}*\n\n`;
-    text += `_Tüm camlarımız %100 orijinal, barkodlu ve garanti belgesi ile teslim edilir._`;
+    
+    if (isAllContact) {
+      text += `_Tüm lensleriniz %100 orijinal, barkodlu ve üretici güvenceli steril ambalajında teslim edilir._`;
+    } else if (isAllEyeglass) {
+      text += `_Tüm camlarınız %100 orijinal, barkodlu ve garanti belgesi ile teslim edilir._`;
+    } else {
+      text += `_Tüm camlarınız ve lensleriniz %100 orijinal, barkodlu ve garanti belgesi ile teslim edilir._`;
+    }
+    
     return text;
   };
 
@@ -218,7 +264,15 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
       return;
     }
 
+    const hasContact = activeList.items.some(i => isContactProduct(i.lensSnapshot));
+    const hasEyeglass = activeList.items.some(i => !isContactProduct(i.lensSnapshot));
+    const isAllContact = hasContact && !hasEyeglass;
+    const isAllEyeglass = !hasContact && hasEyeglass;
+
     const storeTitle = activeList.opticianStoreName ? activeList.opticianStoreName.toUpperCase() : 'OPTİK MAĞAZASI TEKLİFİ';
+    let docTitle = '👓 OPTİK CAM VE LENS FİYAT TEKLİFİ';
+    if (isAllContact) docTitle = '👁️ KONTAKT LENS FİYAT TEKLİFİ';
+    else if (isAllEyeglass) docTitle = '👓 OPTİK CAM FİYAT TEKLİFİ';
 
     let html = `<!DOCTYPE html>
 <html lang="tr">
@@ -250,13 +304,13 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
   <div class="header">
     <div>
       <h1 class="store-name">🏬 ${storeTitle}</h1>
-      <div class="title">👓 OPTİK CAM VE LENS FİYAT TEKLİFİ</div>
+      <div class="title">${docTitle}</div>
       <div class="subtitle">Teklif / Paket: <strong>${activeList.name}</strong></div>
       ${activeList.patientName ? `<div class="subtitle">Müşteri / Hasta: <strong>${activeList.patientName}</strong></div>` : ''}
     </div>
     <div class="meta">
       <div>Tarih: ${new Date().toLocaleDateString('tr-TR')}</div>
-      <div>Profesyonel Optik Danışmanlık</div>
+      <div>Profesyonel Danışmanlık</div>
     </div>
   </div>
 
@@ -273,20 +327,37 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
 
     activeList.items.forEach((item, index) => {
       const lens = sanitizeLens(item.lensSnapshot);
-      const qText = item.quantity === 2 ? 'Çift Cam (2 Adet)' : 'Tek Cam (1 Adet)';
+      const isContact = isContactProduct(lens);
+      const qText = isContact
+        ? (item.quantity === 2 ? '2 Kutu (Çift Göz)' : '1 Kutu (Tek Göz)')
+        : (item.quantity === 2 ? 'Çift Cam (2 Adet)' : 'Tek Cam (1 Adet)');
+      
+      const deliveryLabel = lens.deliveryType === 'stock'
+        ? (isContact ? 'Stok Lens' : 'Stok Cam')
+        : (isContact ? 'Özel Sipariş / RX Lens' : 'RX Özel Üretim');
+      
       const price = item.customRetailPrice ?? (lens.retailPrice * item.quantity);
       
+      const specLine = isContact
+        ? `<div style="color: #64748b; font-size: 11px; margin-top: 2px;">${lens.wearPeriod ? `${lens.wearPeriod} | ` : ''}Kategori: ${lens.category} | Tür: ${deliveryLabel}</div>
+           <div class="features">
+             <strong>✨ Öne Çıkan Özellikler & Kutu:</strong> ${lens.boxContent || 'Orijinal Kutu'} ${lens.baseCurve ? `• BC: ${lens.baseCurve}` : ''} ${lens.diameter ? `• DIA: ${lens.diameter}` : ''}
+             ${lens.material ? `<br>• <em>Materyal: ${lens.material}</em>` : ''}
+             ${lens.notes ? `<br>• <em>Detay: ${lens.notes}</em>` : ''}
+           </div>`
+        : `<div style="color: #64748b; font-size: 11px; margin-top: 2px;">İndeks: ${lens.index} | Kategori: ${lens.category} | Tür: ${deliveryLabel}</div>
+           <div class="features">
+             <strong>✨ Öne Çıkan Faydalar & Kaplama:</strong> ${lens.coating || 'Standart Yüksek Kalite Kaplama'}
+             ${lens.material ? `<br>• <em>Materyal: ${lens.material}</em>` : ''}
+             ${lens.notes ? `<br>• <em>Detay: ${lens.notes}</em>` : ''}
+           </div>`;
+
       html += `
       <tr>
         <td class="td"><strong>${index + 1}</strong></td>
         <td class="td">
           <div style="font-weight: bold; font-size: 13px; color: #0f172a;">${lens.brand} - ${lens.name}</div>
-          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">İndeks: ${lens.index} | Kategori: ${lens.category} | Tür: ${lens.deliveryType === 'stock' ? 'Stok Cam' : 'RX Özel'}</div>
-          <div class="features">
-            <strong>✨ Öne Çıkan Faydalar & Kaplama:</strong> ${lens.coating || 'Standart Yüksek Kalite Kaplama'}
-            ${lens.material ? `<br>• <em>Materyal: ${lens.material}</em>` : ''}
-            ${lens.notes ? `<br>• <em>Detay: ${lens.notes}</em>` : ''}
-          </div>
+          ${specLine}
         </td>
         <td class="td">${qText}</td>
         <td class="td" style="text-align: right; font-weight: bold; color: #0f172a; font-size: 13px;">
@@ -305,7 +376,13 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
   </div>
 
   <div style="margin-top: 20px; font-size: 11px; color: #475569; background: #fffbeb; border: 1px solid #fde68a; padding: 12px; border-radius: 6px; line-height: 1.5;">
-    <strong>Garanti & Kullanım Bilgilendirmesi:</strong> Teklifimizde sunulan tüm optik camlar orijinal garanti sertifikası ile teslim edilir. Optik uyum ve alışma süreci boyunca ücretsiz danışmanlık hizmeti sunulmaktadır. Bu teklif 15 gün geçerlidir.
+    <strong>Garanti & Kullanım Bilgilendirmesi:</strong> ${
+      isAllContact
+        ? 'Teklifimizde sunulan tüm lensleriniz %100 orijinal, steril ambalajlı ve üretici güvencesiyle teslim edilir. Lens kullanım ve bakım süreci boyunca danışmanlık hizmeti sunulmaktadır. Bu teklif 15 gün geçerlidir.'
+        : isAllEyeglass
+        ? 'Teklifimizde sunulan tüm camlarınız orijinal garanti sertifikası ile teslim edilir. Optik uyum ve alışma süreci boyunca ücretsiz danışmanlık hizmeti sunulmaktadır. Bu teklif 15 gün geçerlidir.'
+        : 'Teklifimizde sunulan tüm camlarınız ve lensleriniz orijinal garanti sertifikası ile teslim edilir. Optik uyum ve kullanım süreci boyunca ücretsiz danışmanlık hizmeti sunulmaktadır. Bu teklif 15 gün geçerlidir.'
+    }
   </div>
 
   <div style="margin-top: 30px; text-align: center;" class="no-print">
@@ -577,9 +654,9 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
                 <Plus className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Bu listede henüz cam yok</h3>
+                <h3 className="text-sm font-bold text-slate-900">Bu listede henüz ürün yok</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                  Katalogdan beğendiğiniz camları "Özel Listeye Ekle" butonuna basarak buraya toplayabilir ve teklif oluşturabilirsiniz.
+                  Katalogdan beğendiğiniz cam veya lensleri "Özel Listeye Ekle" butonuna basarak buraya toplayabilir ve teklif oluşturabilirsiniz.
                 </p>
               </div>
               <button
@@ -593,6 +670,7 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
               {activeList.items.map((item, idx) => {
                 const lens = sanitizeLens(item.lensSnapshot);
+                const isContact = isContactProduct(lens);
                 const fin = calculateLensFinancials(
                   lens,
                   brandDiscounts,
@@ -612,16 +690,16 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
                           {lens.brand}
                         </span>
                         <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                          {lens.index} İndeks
+                          {isContact ? (lens.wearPeriod || 'Kontakt Lens') : `${lens.index} İndeks`}
                         </span>
                         <span className="text-xs font-bold text-slate-900">
                           {lens.name}
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                        <span>{lens.coating}</span>
+                        <span>{isContact ? (lens.boxContent || lens.material || 'Standart Kutu') : (lens.coating || 'Standart Kaplama')}</span>
                         <span>•</span>
-                        <span>{lens.deliveryType === 'stock' ? 'Stok Cam' : 'RX Özel Üretim'}</span>
+                        <span>{lens.deliveryType === 'stock' ? (isContact ? 'Stok Lens' : 'Stok Cam') : (isContact ? 'Özel Sipariş / RX Lens' : 'RX Özel Üretim')}</span>
                       </div>
                     </div>
 
@@ -637,7 +715,7 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
-                          Çift (2x)
+                          {isContact ? '2 Kutu (2x)' : 'Çift (2x)'}
                         </button>
                         <button
                           onClick={() => handleUpdateItemQuantity(item.id, 1)}
@@ -647,7 +725,7 @@ export const CustomListsView: React.FC<CustomListsViewProps> = ({
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
-                          Tek (1x)
+                          {isContact ? '1 Kutu (1x)' : 'Tek (1x)'}
                         </button>
                       </div>
 

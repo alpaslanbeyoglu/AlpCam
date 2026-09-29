@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
 import { parseCostFromCode } from '../utils/costCodeParser';
-import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2, Edit2, Save, Tag, Barcode } from 'lucide-react';
+import { X, Sparkles, Plus, Check, ShieldCheck, CheckCircle2, Sliders, Eye, Glasses, Package, Building2, ExternalLink, Trash2, Edit2, Save, Tag, Barcode, Printer, MessageSquare, Copy, Share2 } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
 import { HoyaProgressiveTableModal } from './HoyaProgressiveTableModal';
+import { getEnhancedLensSpecs } from '../utils/lensSpecsHelper';
+import { exportLensCardToPDF, generateLensWhatsAppMessage } from '../utils/lensCardExport';
 
 interface LensDetailModalProps {
   lens: Lens | null;
@@ -38,8 +40,33 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
   );
   const [customPriceInput, setCustomPriceInput] = useState<string>('');
   const [addedSuccess, setAddedSuccess] = useState(false);
+  const [copiedNotice, setCopiedNotice] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showHoyaTable, setShowHoyaTable] = useState(false);
+
+  // Export handlers
+  const handleExportPDF = () => {
+    if (!lens) return;
+    const activeStore = customLists[0]?.opticianStoreName;
+    exportLensCardToPDF(lens, pairCount, customPrice, activeStore);
+  };
+
+  const handleWhatsApp = () => {
+    if (!lens) return;
+    const activeStore = customLists[0]?.opticianStoreName;
+    const text = encodeURIComponent(generateLensWhatsAppMessage(lens, pairCount, customPrice, activeStore));
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
+  const handleCopyText = () => {
+    if (!lens) return;
+    const activeStore = customLists[0]?.opticianStoreName;
+    const text = generateLensWhatsAppMessage(lens, pairCount, customPrice, activeStore);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedNotice(true);
+      setTimeout(() => setCopiedNotice(false), 2000);
+    });
+  };
 
   // Editing States for Admin Corrections
   const [isEditing, setIsEditing] = useState(false);
@@ -761,57 +788,105 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
               )}
 
               {/* Technical Specs Grid */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {isContact ? (
-                  <>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Kullanım Süresi</span>
-                      <span className="font-semibold text-slate-800">{lens.wearPeriod || 'Aylık'}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Kutu Ambalajı</span>
-                      <span className="font-semibold text-slate-800">{lens.boxContent || '6 Adet / Kutu'}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Temel Eğri (BC)</span>
-                      <span className="font-semibold text-slate-800">{lens.baseCurve ? `${lens.baseCurve} mm` : '8.60 mm'}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Çap (DIA)</span>
-                      <span className="font-semibold text-slate-800">{lens.diameter ? `${lens.diameter} mm` : '14.20 mm'}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik (SPH)</span>
-                      <span className="font-semibold text-slate-800">{lens.sphRange || '-0.50 / -10.00'}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Materyal / Su Oranı</span>
-                      <span className="font-semibold text-slate-800">{lens.material || '%48 Su / Silikon Hidrojel'}</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Hammadde</span>
-                      <span className="font-semibold text-slate-800">{lens.material}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Teslimat / Stok</span>
-                      <span className="font-semibold text-slate-800">
-                        {lens.deliveryType === 'stock' ? 'Stok (Aynı Gün)' : 'RX Özel Üretim (3-5 İş Günü)'}
+              {(() => {
+                const specs = getEnhancedLensSpecs(lens);
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">
+                        {specs.isContact ? '🔬 Kontakt Lens Teknik Spesifikasyonları' : '🔬 Optik Cam Teknik Özellikleri'}
                       </span>
+                      {specs.isContact && specs.hasMultipleBaseCurves && (
+                        <span className="text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">
+                          🎯 Seçenekli Temel Eğri (BC: {specs.baseCurve})
+                        </span>
+                      )}
                     </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik (SPH)</span>
-                      <span className="font-semibold text-slate-800">{lens.sphRange || 'Standart üretim'}</span>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      {specs.isContact ? (
+                        <>
+                          <div className={`p-2.5 rounded-xl border ${specs.hasMultipleBaseCurves ? 'bg-amber-50/80 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Temel Eğri (BC)</span>
+                            <span className="font-bold text-slate-900">{specs.baseCurve} mm</span>
+                            {specs.hasMultipleBaseCurves && (
+                              <span className="block text-[9px] text-amber-800 font-medium mt-0.5">
+                                Üretim: {specs.baseCurveOptions.join(' & ')} mm
+                              </span>
+                            )}
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Çap (DIA)</span>
+                            <span className="font-bold text-slate-900">{specs.diameter} mm</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Kullanım & Kutu</span>
+                            <span className="font-bold text-slate-900">{specs.wearPeriodText}</span>
+                            <span className="block text-[10px] text-slate-500">{specs.boxContent}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Su İçeriği</span>
+                            <span className="font-bold text-teal-800">{specs.waterContent}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Oksijen Geçirgenliği</span>
+                            <span className="font-bold text-cyan-800">{specs.oxygenTransmissibility || 'Yüksek İletkenlik'}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Materyal / Polimer</span>
+                            <span className="font-semibold text-slate-800 truncate block" title={specs.material}>{specs.material}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 sm:col-span-2">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik (SPH) & Silindirik</span>
+                            <span className="font-bold text-slate-900">{specs.sphRangeText} {specs.cylMaxText ? `| CYL: ${specs.cylMaxText}` : ''}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">UV Blokajı</span>
+                            <span className="font-semibold text-emerald-800 text-[11px]">{specs.uvProtection}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Kırılma İndeksi</span>
+                            <span className="font-bold text-slate-900">{specs.index} İndeks</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Abbe Değeri (Netlik)</span>
+                            <span className="font-bold text-sky-800">{specs.abbeValue} Abbe</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Yoğunluk</span>
+                            <span className="font-bold text-slate-800">{specs.density}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Hammadde Materyali</span>
+                            <span className="font-semibold text-slate-800">{specs.material}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">UV Koruması</span>
+                            <span className="font-bold text-emerald-800">{specs.uvProtection}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Teslimat Türü</span>
+                            <span className="font-bold text-slate-800">
+                              {lens.deliveryType === 'stock' ? 'Stok Cam (Aynı Gün)' : 'RX Özel Üretim (3-5 Gün)'}
+                            </span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 sm:col-span-2">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik / Silindirik Limit</span>
+                            <span className="font-bold text-slate-900">SPH: {specs.sphRangeText} | CYL: ±{lens.cylMax ?? 2.00} Dpt</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Çerçeve Uyumu</span>
+                            <span className="font-semibold text-slate-700 text-[10px]">{specs.frameCompatibility}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Maks Silindirik (CYL)</span>
-                      <span className="font-semibold text-slate-800">± {lens.cylMax ?? 2.00} Dpt</span>
-                    </div>
-                  </>
-                )}
-              </div>
+                  </div>
+                );
+              })()}
 
               {lens.notes && (
                 <div className="bg-amber-50/60 border border-amber-200 text-amber-900 text-xs p-2.5 rounded-xl">
@@ -935,6 +1010,46 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Export / Share Product Card Bar */}
+              <div className="bg-gradient-to-r from-sky-50 via-indigo-50/60 to-teal-50/60 p-3 rounded-2xl border border-sky-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Share2 className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Ürün Bilgi Kartını Dışarı Aktar & Paylaş</span>
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-500">Müşteri / Hasta Bilgilendirmesi</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={handleExportPDF}
+                    className="px-2.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition hover:border-sky-300"
+                    title="Ürün Bilgi ve Teknik Özellikler Kartını PDF Olarak Yazdır / Kaydet"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                    <span className="truncate">PDF / Yazdır</span>
+                  </button>
+
+                  <button
+                    onClick={handleWhatsApp}
+                    className="px-2.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
+                    title="Müşteriye WhatsApp Üzerinden Bilgi Kartı ve Fiyat Gönder"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                    <span className="truncate">WhatsApp</span>
+                  </button>
+
+                  <button
+                    onClick={handleCopyText}
+                    className="px-2.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition hover:border-teal-300"
+                    title="Ürün Detay Metnini Panoya Kopyala"
+                  >
+                    {copiedNotice ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <Copy className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                    <span className="truncate">{copiedNotice ? 'Kopyalandı ✓' : 'Metni Kopyala'}</span>
+                  </button>
                 </div>
               </div>
 

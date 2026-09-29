@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown, Eye, Glasses, Building2, Droplet, LayoutGrid, List, Table2 } from 'lucide-react';
+import { Search, X, Filter, Sparkles, SlidersHorizontal, ArrowUpDown, Eye, Glasses, Building2, Droplet, LayoutGrid, List } from 'lucide-react';
 import { LensCategory, ProductType } from '../types';
 
 interface LensSearchBarProps {
@@ -29,8 +29,8 @@ interface LensSearchBarProps {
   setSelectedDelivery: (val: 'all' | 'stock' | 'rx') => void;
   sortBy: 'price_asc' | 'price_desc' | 'name_asc' | 'index_asc';
   setSortBy: (val: 'price_asc' | 'price_desc' | 'name_asc' | 'index_asc') => void;
-  viewMode: 'cards' | 'compact' | 'matrix';
-  setViewMode: (mode: 'cards' | 'compact' | 'matrix') => void;
+  viewMode: 'cards' | 'compact';
+  setViewMode: (mode: 'cards' | 'compact') => void;
   showAdvanced: boolean;
   setShowAdvanced: (show: boolean) => void;
   sphCheck: string;

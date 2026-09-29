@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Lens, BrandDiscount } from '../types';
 import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
-import { Plus, Check, Info, Sparkles, Building2, Glasses, Eye, Layers, ShieldCheck } from 'lucide-react';
+import { Plus, Check, Info, Sparkles, Building2, Glasses, Eye, Layers, ShieldCheck, Scale, Printer } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
+import { exportLensCardToPDF } from '../utils/lensCardExport';
 
 interface UnifiedSeriesCardProps {
   seriesName: string;
@@ -16,6 +17,8 @@ interface UnifiedSeriesCardProps {
   onAddToList: (lens: Lens, pairCount: 1 | 2) => void;
   isAddedToActiveList?: (lensId: string) => boolean;
   isAdmin?: boolean;
+  isComparing?: (lensId: string) => boolean;
+  onToggleCompare?: (lens: Lens) => void;
 }
 
 const BRAND_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -41,6 +44,8 @@ export const UnifiedSeriesCard: React.FC<UnifiedSeriesCardProps> = ({
   onAddToList,
   isAddedToActiveList,
   isAdmin,
+  isComparing,
+  onToggleCompare,
 }) => {
   // 1. Extract available tech / category segments in this series (White, Sensity 1, Sensity 2, Polarized)
   const segments = useMemo(() => {
@@ -177,13 +182,37 @@ export const UnifiedSeriesCard: React.FC<UnifiedSeriesCardProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={() => onOpenDetails(activeLens)}
-            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition shrink-0"
-            title="Detaylı Cam Kartı Bilgileri"
-          >
-            <Info className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {onToggleCompare && (
+              <button
+                onClick={() => onToggleCompare(activeLens)}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition shrink-0 ${
+                  isComparing && isComparing(activeLens.id)
+                    ? 'bg-amber-500 text-slate-950 shadow-2xs font-bold'
+                    : 'bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800'
+                }`}
+                title={isComparing && isComparing(activeLens.id) ? 'Kıyaslamadan Çıkar' : 'Diğer Camlarla Kıyasla'}
+              >
+                <Scale className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            <button
+              onClick={() => exportLensCardToPDF(activeLens, pairCount)}
+              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 flex items-center justify-center transition shrink-0"
+              title="Cam Bilgi Kartını PDF Olarak Yazdır / Kaydet"
+            >
+              <Printer className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={() => onOpenDetails(activeLens)}
+              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition shrink-0"
+              title="Detaylı Cam Kartı Bilgileri"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Series Title */}
@@ -291,11 +320,13 @@ export const UnifiedSeriesCard: React.FC<UnifiedSeriesCardProps> = ({
           <div>
             <div className="flex items-center gap-1">
               <span className="text-[11px] text-slate-500 font-semibold">
-                {pairCount === 2 ? 'Çift Cam (2 Adet):' : 'Tek Cam (1 Adet):'}
+                {activeLens.productType === 'contact_lens' || activeLens.category === 'contact_lens'
+                  ? pairCount === 2 ? '2 Kutu (Çift):' : '1 Kutu (Tek):'
+                  : pairCount === 2 ? 'Çift Cam (2 Adet):' : 'Tek Cam (1 Adet):'}
               </span>
               {isStock && (
                 <span className="text-[10px] text-amber-700 font-extrabold bg-amber-100 px-1.5 py-0.2 rounded" title="Stok Ürün (Hızlı Teslimat)">
-                  Stok (*)
+                  {activeLens.productType === 'contact_lens' || activeLens.category === 'contact_lens' ? 'Stok Lens (*)' : 'Stok Cam (*)'}
                 </span>
               )}
             </div>
@@ -322,27 +353,59 @@ export const UnifiedSeriesCard: React.FC<UnifiedSeriesCardProps> = ({
           )}
         </div>
 
-        {/* Add to List Button */}
-        <button
-          onClick={() => onAddToList(activeLens, pairCount)}
-          className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm ${
-            isAdded
-              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-              : 'bg-amber-600 hover:bg-amber-700 text-white'
-          }`}
-        >
-          {isAdded ? (
-            <>
-              <Check className="w-4 h-4" />
-              <span>Teklif Listesinde Var (Ekle)</span>
-            </>
-          ) : (
-            <>
-              <Plus className="w-4 h-4" />
-              <span>Teklife Ekle ({pairCount === 2 ? 'Çift' : 'Tek'} - {selectedIndex} {activeLens.material || ''})</span>
-            </>
+        {/* Action Buttons Row */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onAddToList(activeLens, pairCount)}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm ${
+              isAdded
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'bg-sky-600 hover:bg-sky-700 text-white'
+            }`}
+          >
+            {isAdded ? (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Teklif Listesinde Var</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                <span>Teklife Ekle ({pairCount === 2 ? 'Çift' : 'Tek'} - {selectedIndex})</span>
+              </>
+            )}
+          </button>
+
+          {onToggleCompare && (
+            <button
+              onClick={() => onToggleCompare(activeLens)}
+              className={`p-2.5 rounded-xl border transition flex items-center justify-center ${
+                isComparing && isComparing(activeLens.id)
+                  ? 'bg-amber-500 border-amber-600 text-slate-950 font-bold shadow-2xs'
+                  : 'border-slate-300 hover:bg-amber-50 text-slate-600 hover:text-amber-800 bg-white'
+              }`}
+              title={isComparing && isComparing(activeLens.id) ? 'Kıyaslamadan Çıkar' : 'Kıyaslama Modülüne Ekle'}
+            >
+              <Scale className="w-4 h-4" />
+            </button>
           )}
-        </button>
+
+          <button
+            onClick={() => exportLensCardToPDF(activeLens, pairCount)}
+            className="p-2.5 rounded-xl border border-slate-300 hover:bg-sky-50 text-sky-700 transition bg-white"
+            title="Seçili Cam Bilgi Kartını PDF / Yazdır"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => onOpenDetails(activeLens)}
+            className="p-2.5 rounded-xl border border-slate-300 hover:bg-white text-slate-700 transition bg-white"
+            title="Özellikler & Detaylar"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

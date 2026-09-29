@@ -29,7 +29,11 @@ export interface Lens {
   sphRange?: string;        // Sferik Aralık (örn: -6.00 / +6.00 veya -12.00 / +8.00)
   cylMax?: number;          // Maksimum Silindirik (örn: 2.00 veya 4.00)
   diameter?: string;        // Çap / DIA (örn: 65/70/75 veya 14.2)
-  baseCurve?: string;       // Temel Eğri / BC (Kontakt Lensler için örn: 8.4, 8.6, 8.8)
+  baseCurve?: string;       // Temel Eğri / BC (Kontakt Lensler için örn: 8.4, 8.5 / 8.9, 8.6, 8.8)
+  waterContent?: string;    // Su İçeriği (örn: %38, %48, %55, %78)
+  oxygenTransmissibility?: string; // Oksijen Geçirgenliği / Dk/t (örn: 147 Dk/t, 160 Dk/t)
+  abbeValue?: number;       // Abbe Değeri (Gözlük camları için örn: 58, 42, 38, 32)
+  uvProtection?: string;    // UV Blokajı / Koruma (örn: Sınıf 1 UV, UV400, %100 UVA/UVB)
   boxContent?: string;      // Kutu İçeriği (örn: 6'lı Kutu, 30'lu Kutu, Tek Şişe)
   wearPeriod?: 'daily' | 'monthly' | 'yearly' | 'fortnightly'; // Değişim Sıklığı: Günlük, Aylık, Yıllık, 15 Günlük
   lensType?: 'spheric' | 'toric' | 'multifocal' | 'color'; // Kontakt Lens Tipi: Sferik, Torik (Astigmat), Multifokal, Renkli

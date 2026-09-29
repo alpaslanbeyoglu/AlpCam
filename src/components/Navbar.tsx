@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck, Building2, FileJson, Table2 } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, Cloud, Sliders, ShieldCheck, Lock, Unlock, UserCheck, Building2, FileJson, Scale } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: 'catalog' | 'custom_lists' | 'discounts' | 'drive_sync' | 'definitions' | 'admin_export' | 'pdf_scanner';
@@ -15,6 +15,8 @@ interface NavbarProps {
   isDriveWorking?: boolean;
   isAdmin: boolean;
   onOpenAdminModal: () => void;
+  compareCount?: number;
+  onOpenCompare?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -30,6 +32,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   isDriveWorking,
   isAdmin,
   onOpenAdminModal,
+  compareCount = 0,
+  onOpenCompare,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
@@ -227,6 +231,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Sliders className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
           <span>İskontolarım</span>
         </button>
+
+        {onOpenCompare && (
+          <button
+            onClick={onOpenCompare}
+            className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold whitespace-nowrap transition ${
+              compareCount > 0
+                ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 shadow-2xs'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+            title="Seçili cam ve lensleri yan yana kıyasla"
+          >
+            <Scale className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${compareCount > 0 ? 'text-amber-600' : 'text-slate-500'}`} />
+            <span>Cam Kıyaslama</span>
+            {compareCount > 0 && (
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full font-black bg-amber-500 text-white">
+                {compareCount}
+              </span>
+            )}
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('drive_sync')}

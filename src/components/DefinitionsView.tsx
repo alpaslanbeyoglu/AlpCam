@@ -349,7 +349,7 @@ export const DefinitionsView: React.FC<DefinitionsViewProps> = ({ isAdmin, showT
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 font-medium h-20 resize-none focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                 />
                 <span className="text-[11px] text-slate-400 mt-1 block">
-                  Bu firmaya bağlı markalar, katalogdaki camlar ve fiyat listeleri taranırken otomatik olarak bu firma ile ilişkilendirilir.
+                  Bu firmaya bağlı markalar, katalogdaki camlar, lensler ve fiyat listeleri taranırken otomatik olarak bu firma ile ilişkilendirilir.
                 </span>
               </div>
 

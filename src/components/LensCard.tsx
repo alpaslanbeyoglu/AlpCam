@@ -1,8 +1,10 @@
 import React from 'react';
 import { Lens, BrandDiscount, CustomList } from '../types';
 import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
-import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers, Eye, Glasses, Package, Building2, Trash2, Tag } from 'lucide-react';
+import { Plus, Check, Info, ShieldCheck, Sparkles, Clock, Layers, Eye, Glasses, Package, Building2, Trash2, Tag, Printer, MessageSquare, Copy, Share2, Scale } from 'lucide-react';
 import { getDistributorForBrand, getDistributorInfo } from '../data/distributors';
+import { getEnhancedLensSpecs } from '../utils/lensSpecsHelper';
+import { exportLensCardToPDF, generateLensWhatsAppMessage } from '../utils/lensCardExport';
 
 interface LensCardProps {
   lens: Lens;
@@ -15,6 +17,8 @@ interface LensCardProps {
   isAddedToActiveList?: boolean;
   isAdmin?: boolean;
   onDeleteLens?: (lensId: string) => void;
+  isComparing?: boolean;
+  onToggleCompare?: (lens: Lens) => void;
 }
 
 const BRAND_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -54,6 +58,8 @@ export const LensCard: React.FC<LensCardProps> = ({
   isAddedToActiveList,
   isAdmin,
   onDeleteLens,
+  isComparing,
+  onToggleCompare,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
   const campaign = getCampaignDetails(lens, pairCount, catalog);
@@ -220,60 +226,104 @@ export const LensCard: React.FC<LensCardProps> = ({
         )}
 
         {/* Production Range & Features Highlight Box */}
-        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
-          {isContact ? (
-            /* Contact Lens Specific Spec Line */
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
-                <Package className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                <span className="truncate">{lens.boxContent || '6 Adet / Kutu'}</span>
-                {lens.baseCurve && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-100/70 text-teal-900 font-bold">
-                    BC: {lens.baseCurve}
-                  </span>
-                )}
-                {lens.diameter && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-100/70 text-teal-900 font-bold">
-                    DIA: {lens.diameter}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
-                <span className="font-medium text-slate-700">{lens.material || 'Silikon Hidrojel'}</span>
-                {lens.sphRange && (
-                  <span className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                    Üretim: {lens.sphRange}
-                  </span>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Optical Eyeglass Lens Spec Line */
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
-                <Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                <span className="truncate">{lens.coating || 'Standart Yüksek Kalite Kaplama'}</span>
-              </div>
+        {(() => {
+          const specs = getEnhancedLensSpecs(lens);
+          return (
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
+              {specs.isContact ? (
+                /* Contact Lens Specific Spec Line */
+                <div className="space-y-1.5">
+                  {/* Base Curve (BC) Options Badge & Diameter */}
+                  <div className="flex items-center justify-between flex-wrap gap-1.5">
+                    <div className="flex items-center gap-1">
+                      <span
+                        className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 border shadow-2xs ${
+                          specs.hasMultipleBaseCurves
+                            ? 'bg-amber-100/90 text-amber-950 border-amber-300'
+                            : 'bg-teal-100/90 text-teal-950 border-teal-300'
+                        }`}
+                        title="Temel Eğri (Kornea eğrilik uyumu)"
+                      >
+                        <span className="text-teal-800">🎯 BC:</span>
+                        <span className="font-black">{specs.baseCurve} mm</span>
+                        {specs.hasMultipleBaseCurves && (
+                          <span className="text-[9px] bg-amber-500 text-white font-bold px-1 rounded-sm ml-0.5">
+                            Çift Eğri Üretim
+                          </span>
+                        )}
+                      </span>
+                    </div>
 
-              {/* Production Limits (SPH & CYL Range Badge) */}
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60 flex-wrap gap-1">
-                <span className="font-medium text-slate-600">{lens.material || 'Organik'}</span>
-                <div className="flex items-center gap-1">
-                  {lens.sphRange && (
-                    <span className="font-bold text-sky-900 bg-sky-100/80 px-1.5 py-0.5 rounded border border-sky-200">
-                      SPH: {lens.sphRange}
+                    <span className="text-[10px] font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                      DIA: {specs.diameter} mm
                     </span>
-                  )}
-                  {lens.cylMax !== undefined && (
-                    <span className="font-bold text-indigo-900 bg-indigo-100/80 px-1.5 py-0.5 rounded border border-indigo-200">
-                      CYL: ±{lens.cylMax}
+                  </div>
+
+                  {/* Packaging, Water Content & Material */}
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px] pt-1.5 border-t border-slate-200/60">
+                    <div className="text-slate-700 font-medium truncate flex items-center gap-1">
+                      <Package className="w-3 h-3 text-teal-600 shrink-0" />
+                      <span className="truncate">{specs.boxContent}</span>
+                    </div>
+                    <div className="text-right text-teal-900 font-bold truncate">
+                      {specs.waterContent}
+                    </div>
+                  </div>
+
+                  {/* Material & SPH Range & Oxygen Dk/t */}
+                  <div className="flex items-center justify-between text-[10px] text-slate-600 pt-1 border-t border-slate-200/40 gap-1 flex-wrap">
+                    <span className="font-medium text-slate-600 truncate max-w-[130px]" title={specs.material}>
+                      {specs.material}
                     </span>
-                  )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {specs.oxygenTransmissibility && (
+                        <span className="font-bold text-cyan-900 bg-cyan-50 px-1.5 py-0.5 rounded border border-cyan-200" title="Oksijen Geçirgenliği">
+                          {specs.oxygenTransmissibility}
+                        </span>
+                      )}
+                      <span className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                        SPH: {specs.sphRangeText}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Optical Eyeglass Lens Spec Line */
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-1 text-slate-800 font-semibold">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                      <span className="truncate">{lens.coating || 'Standart Yüksek Kalite Kaplama'}</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 shrink-0" title="Optik Netlik Abbe Değeri">
+                      {specs.abbeValue} Abbe
+                    </span>
+                  </div>
+
+                  {/* Production Limits (SPH & CYL Range Badge & UV/Diameter) */}
+                  <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-200/60 flex-wrap gap-1">
+                    <span className="font-medium text-slate-600 truncate max-w-[120px]">{lens.material || specs.material}</span>
+                    <div className="flex items-center gap-1">
+                      {lens.sphRange && (
+                        <span className="font-bold text-sky-900 bg-sky-100/80 px-1.5 py-0.5 rounded border border-sky-200">
+                          SPH: {lens.sphRange}
+                        </span>
+                      )}
+                      {lens.cylMax !== undefined && (
+                        <span className="font-bold text-indigo-900 bg-indigo-100/80 px-1.5 py-0.5 rounded border border-indigo-200">
+                          CYL: ±{lens.cylMax}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">
+                        {specs.uvProtection}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* ÖN GÖRÜNÜMDE KAMPANYA DETAYI & NORMAL LİSTE EŞLEŞMESİ BLOĞU */}
         {isCampaign && (
@@ -515,10 +565,32 @@ export const LensCard: React.FC<LensCardProps> = ({
             )}
           </button>
 
+          {onToggleCompare && (
+            <button
+              onClick={() => onToggleCompare(lens)}
+              className={`p-2 rounded-xl border transition flex items-center justify-center ${
+                isComparing
+                  ? 'bg-amber-500 border-amber-600 text-slate-950 font-bold shadow-2xs'
+                  : 'border-slate-300 hover:bg-amber-50 text-slate-600 hover:text-amber-800'
+              }`}
+              title={isComparing ? 'Kıyaslama Listesinden Çıkar' : 'Diğer Camlarla Kıyasla'}
+            >
+              <Scale className="w-4 h-4" />
+            </button>
+          )}
+
+          <button
+            onClick={() => exportLensCardToPDF(lens, pairCount)}
+            className="p-2 rounded-xl border border-slate-300 hover:bg-sky-50 text-sky-700 transition"
+            title="Ürün Bilgi Kartını PDF / Yazdır"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
+
           <button
             onClick={() => onOpenDetails(lens)}
             className="p-2 rounded-xl border border-slate-300 hover:bg-white text-slate-700 transition"
-            title="Ürün Detayı & Reçete Uyumu"
+            title="Ürün Detayı, Reçete & Dışa Aktarma"
           >
             <Info className="w-4 h-4" />
           </button>

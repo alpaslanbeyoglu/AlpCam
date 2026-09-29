@@ -44,6 +44,8 @@ import { AdminLoginModal } from './components/AdminLoginModal';
 import { BulkEditActions } from './components/BulkEditActions';
 import { UnifiedSeriesCard } from './components/UnifiedSeriesCard';
 import { ContactLensCard } from './components/ContactLensCard';
+import { LensComparisonModal } from './components/LensComparisonModal';
+import { ComparisonFloatingBar } from './components/ComparisonFloatingBar';
 import { useExchangeRates } from './hooks/useExchangeRates';
 
 import {
@@ -121,6 +123,36 @@ export default function App() {
   const [isDriveWorking, setIsDriveWorking] = useState(false);
   const [driveWorkingText, setDriveWorkingText] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Product Comparison State
+  const [compareLenses, setCompareLenses] = useState<Lens[]>([]);
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
+
+  const handleToggleCompare = (lens: Lens) => {
+    setCompareLenses((prev) => {
+      const exists = prev.some((l) => l.id === lens.id);
+      if (exists) {
+        showToast(`"${lens.name}" kıyaslama listesinden çıkarıldı.`);
+        return prev.filter((l) => l.id !== lens.id);
+      } else {
+        if (prev.length >= 6) {
+          showToast('En fazla 6 ürün aynı anda kıyaslanabilir.');
+          return prev;
+        }
+        showToast(`"${lens.name}" kıyaslama listesine eklendi.`);
+        return [...prev, lens];
+      }
+    });
+  };
+
+  const handleRemoveFromCompare = (lensId: string) => {
+    setCompareLenses((prev) => prev.filter((l) => l.id !== lensId));
+  };
+
+  const handleClearCompare = () => {
+    setCompareLenses([]);
+    showToast('Kıyaslama listesi temizlendi.');
+  };
 
   const exchangeRates = useExchangeRates();
 
@@ -815,6 +847,8 @@ export default function App() {
                     onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
                     isAddedToActiveList={(id) => isLensInActiveList(id)}
                     isAdmin={isAdmin}
+                    isComparing={(id) => compareLenses.some((c) => c.id === id)}
+                    onToggleCompare={handleToggleCompare}
                   />
                 ))}
                 {filteredLenses
@@ -831,6 +865,8 @@ export default function App() {
                       onAddToList={(l, count) => handleAddToList(l, undefined, undefined, count)}
                       isAddedToActiveList={isLensInActiveList(lens.id)}
                       isAdmin={isAdmin}
+                      isComparing={compareLenses.some((c) => c.id === lens.id)}
+                      onToggleCompare={handleToggleCompare}
                     />
                   ))}
               </div>
@@ -851,6 +887,8 @@ export default function App() {
                       isAddedToActiveList={isLensInActiveList(lens.id)}
                       isAdmin={isAdmin}
                       onDeleteLens={handleDeleteLens}
+                      isComparing={compareLenses.some((c) => c.id === lens.id)}
+                      onToggleCompare={handleToggleCompare}
                     />
                   ))}
                 </div>
@@ -983,6 +1021,36 @@ export default function App() {
       <footer className="py-4 text-center text-[11px] sm:text-xs font-medium text-slate-400 bg-slate-100 border-t border-slate-200 mt-auto">
         OptikCam Uygulaması &copy; {new Date().getFullYear()} Stualp. Tüm hakları saklıdır.
       </footer>
+
+      {/* Comparison Floating Bar */}
+      <ComparisonFloatingBar
+        compareLenses={compareLenses}
+        onOpenComparison={() => setIsComparisonModalOpen(true)}
+        onRemoveLens={handleRemoveFromCompare}
+        onClear={handleClearCompare}
+        pairCount={pairCount}
+        storeName={customLists[0]?.opticianStoreName}
+      />
+
+      {/* Lens Comparison Modal */}
+      <LensComparisonModal
+        isOpen={isComparisonModalOpen}
+        onClose={() => setIsComparisonModalOpen(false)}
+        lenses={compareLenses}
+        onRemoveFromCompare={handleRemoveFromCompare}
+        onClearCompare={handleClearCompare}
+        onAddLensToCompare={(lens) => handleToggleCompare(lens)}
+        catalog={lenses}
+        brandDiscounts={brandDiscounts}
+        pairCount={pairCount}
+        isCustomerMode={isCustomerMode}
+        customLists={customLists}
+        onAddToList={(lens, listId) => handleAddToList(lens, listId)}
+        onOpenDetails={(lens) => {
+          setIsComparisonModalOpen(false);
+          setDetailLens(lens);
+        }}
+      />
 
       {/* Lens Detail Modal */}
       {detailLens && (

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Lens, BrandDiscount } from '../types';
 import { calculateLensFinancials, formatCurrency, getCampaignDetails } from '../utils/pricing';
-import { Plus, Check, Info, Eye, Glasses, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Check, Info, Eye, Glasses, Trash2, Sparkles, Scale, Printer } from 'lucide-react';
+import { exportLensCardToPDF } from '../utils/lensCardExport';
 
 interface LensCompactRowProps {
   lens: Lens;
@@ -14,6 +15,8 @@ interface LensCompactRowProps {
   isAddedToActiveList?: boolean;
   isAdmin?: boolean;
   onDeleteLens?: (lensId: string) => void;
+  isComparing?: boolean;
+  onToggleCompare?: (lens: Lens) => void;
 }
 
 export const LensCompactRow: React.FC<LensCompactRowProps> = ({
@@ -27,6 +30,8 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
   isAddedToActiveList,
   isAdmin,
   onDeleteLens,
+  isComparing,
+  onToggleCompare,
 }) => {
   const fin = calculateLensFinancials(lens, brandDiscounts, pairCount);
   const campaign = getCampaignDetails(lens, pairCount, catalog);
@@ -112,8 +117,8 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
         </div>
       </div>
 
-      {/* Pricing Columns */}
-      <div className="flex items-center gap-3 shrink-0 text-right">
+      {/* Pricing Columns & Actions */}
+      <div className="flex items-center gap-2.5 shrink-0 text-right">
         {isZeroPriceCampaign ? (
           <div>
             <div className="text-[10px] text-amber-800 font-bold uppercase flex items-center gap-1 justify-end">
@@ -164,40 +169,76 @@ export const LensCompactRow: React.FC<LensCompactRowProps> = ({
           </>
         )}
 
-        {/* Quick Add Button */}
-        <button
-          onClick={() => onAddToList(lens)}
-          className={`p-1.5 rounded-lg border transition ${
-            isAddedToActiveList
-              ? 'bg-emerald-600 text-white border-emerald-600'
-              : 'border-slate-300 text-slate-700 hover:border-sky-500 hover:text-sky-600'
-          }`}
-          title="Listeye Ekle"
-        >
-          {isAddedToActiveList ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-        </button>
-
-        {isAdmin && onDeleteLens && (
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1">
+          {/* Quick Add Button */}
           <button
-            onClick={() => {
-              if (!showDeleteConfirm) {
-                setShowDeleteConfirm(true);
-                return;
-              }
-              setShowDeleteConfirm(false);
-              onDeleteLens(lens.id);
-            }}
-            className={`p-1.5 border rounded-lg transition flex items-center justify-center gap-1 ${
-              showDeleteConfirm
-                ? 'border-rose-400 bg-rose-600 text-white animate-pulse px-2'
-                : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+            onClick={() => onAddToList(lens)}
+            className={`p-1.5 rounded-lg border transition ${
+              isAddedToActiveList
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'border-slate-300 text-slate-700 hover:border-sky-500 hover:text-sky-600'
             }`}
-            title={showDeleteConfirm ? 'Silmek için tekrar tıklayın' : 'Katalogdan Sil'}
+            title="Listeye Ekle"
           >
-            <Trash2 className="w-4 h-4" />
-            {showDeleteConfirm && <span className="text-[9px] font-bold">Emin misiniz?</span>}
+            {isAddedToActiveList ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           </button>
-        )}
+
+          {/* Toggle Compare Button */}
+          {onToggleCompare && (
+            <button
+              onClick={() => onToggleCompare(lens)}
+              className={`p-1.5 rounded-lg border transition ${
+                isComparing
+                  ? 'bg-amber-500 border-amber-600 text-slate-950 shadow-2xs font-bold'
+                  : 'border-slate-300 text-slate-600 hover:bg-amber-50 hover:text-amber-800'
+              }`}
+              title={isComparing ? 'Kıyaslamadan Çıkar' : 'Kıyaslamaya Ekle'}
+            >
+              <Scale className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Quick Export PDF */}
+          <button
+            onClick={() => exportLensCardToPDF(lens, pairCount)}
+            className="p-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-sky-50 hover:text-sky-700 transition"
+            title="Bilgi Kartını PDF / Yazdır"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
+
+          {/* Details */}
+          <button
+            onClick={() => onOpenDetails(lens)}
+            className="p-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-white transition"
+            title="Detaylar"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+
+          {isAdmin && onDeleteLens && (
+            <button
+              onClick={() => {
+                if (!showDeleteConfirm) {
+                  setShowDeleteConfirm(true);
+                  return;
+                }
+                setShowDeleteConfirm(false);
+                onDeleteLens(lens.id);
+              }}
+              className={`p-1.5 border rounded-lg transition flex items-center justify-center gap-1 ${
+                showDeleteConfirm
+                  ? 'border-rose-400 bg-rose-600 text-white animate-pulse px-2'
+                  : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+              }`}
+              title={showDeleteConfirm ? 'Silmek için tekrar tıklayın' : 'Katalogdan Sil'}
+            >
+              <Trash2 className="w-4 h-4" />
+              {showDeleteConfirm && <span className="text-[9px] font-bold">Emin misiniz?</span>}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

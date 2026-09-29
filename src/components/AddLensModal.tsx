@@ -244,43 +244,79 @@ export const AddLensModal: React.FC<AddLensModalProps> = ({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Lens Tipi</label>
-                <select
-                  value={lensType}
-                  onChange={(e) => setLensType(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-medium bg-white"
-                >
-                  <option value="spheric">Sferik (Numaralı)</option>
-                  <option value="toric">Torik (Astigmatlı)</option>
-                  <option value="multifocal">Multifokal (Uzak-Yakın)</option>
-                  <option value="color">Renkli Lens</option>
-                </select>
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Lens Tipi</label>
+                  <select
+                    value={lensType}
+                    onChange={(e) => setLensType(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-medium bg-white"
+                  >
+                    <option value="spheric">Sferik (Numaralı)</option>
+                    <option value="toric">Torik (Astigmatlı)</option>
+                    <option value="multifocal">Multifokal (Uzak-Yakın)</option>
+                    <option value="color">Renkli Lens</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Kullanım Süresi</label>
+                  <select
+                    value={wearPeriod}
+                    onChange={(e) => setWearPeriod(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-medium bg-white"
+                  >
+                    <option value="daily">Günlük (1-Day)</option>
+                    <option value="monthly">Aylık</option>
+                    <option value="yearly">Yıllık</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Kutu İçeriği</label>
+                  <input
+                    type="text"
+                    value={boxContent}
+                    onChange={(e) => setBoxContent(e.target.value)}
+                    placeholder="6'lı Kutu"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Kullanım Süresi</label>
-                <select
-                  value={wearPeriod}
-                  onChange={(e) => setWearPeriod(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-medium bg-white"
-                >
-                  <option value="daily">Günlük</option>
-                  <option value="monthly">Aylık</option>
-                  <option value="yearly">Yıllık</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Kutu İçeriği</label>
-                <input
-                  type="text"
-                  value={boxContent}
-                  onChange={(e) => setBoxContent(e.target.value)}
-                  placeholder="6'lı Kutu"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900"
-                />
+              {/* Base Curve (BC) & Diameter (DIA) Input Row */}
+              <div className="grid grid-cols-2 gap-2 bg-teal-50/70 p-2.5 rounded-xl border border-teal-200">
+                <div>
+                  <label className="block font-bold text-teal-950 text-xs mb-1">
+                    🎯 Temel Eğri (BC) mm:
+                  </label>
+                  <input
+                    type="text"
+                    value={baseCurve}
+                    onChange={(e) => setBaseCurve(e.target.value)}
+                    placeholder="Örn: 8.5 / 8.9 veya 8.4 / 8.8 veya 8.6"
+                    className="w-full px-3 py-1.5 rounded-lg border border-teal-300 text-slate-900 bg-white text-xs font-semibold"
+                  />
+                  <span className="text-[10px] text-teal-800 mt-0.5 block">
+                    Çift eğri seçenekleri için eğrileri arasına "/" koyun (örn: 8.5 / 8.9)
+                  </span>
+                </div>
+                <div>
+                  <label className="block font-bold text-teal-950 text-xs mb-1">
+                    📏 Çap (DIA) mm:
+                  </label>
+                  <input
+                    type="text"
+                    value={diameter}
+                    onChange={(e) => setDiameter(e.target.value)}
+                    placeholder="Örn: 14.2 veya 14.0 veya 14.5"
+                    className="w-full px-3 py-1.5 rounded-lg border border-teal-300 text-slate-900 bg-white text-xs font-semibold"
+                  />
+                  <span className="text-[10px] text-teal-800 mt-0.5 block">
+                    Standart kornea lens çapı (mm)
+                  </span>
+                </div>
               </div>
             </div>
           )}
