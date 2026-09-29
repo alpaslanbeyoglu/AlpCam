@@ -305,11 +305,77 @@ export const LensComparisonModal: React.FC<LensComparisonModalProps> = ({
                       {/* --- BÖLÜM 1: TEMEL OPTİK & TEKNİK ÖZELLİKLER --- */}
                       <tr className="bg-sky-50/90 text-sky-950 font-bold">
                         <td colSpan={specsList.length + 1} className="px-3 py-2 text-xs uppercase tracking-wide">
-                          🔬 1. Temel Optik & Teknik Spesifikasyonlar
+                          🔬 1. Temel Optik & Teknik Spesifikasyonlar (Odak / İndeks / Cam Tipi / Kaplama)
                         </td>
                       </tr>
 
-                      {/* Temel Eğri (BC) - Only for contact lenses or highlighted */}
+                      {/* 1. Odak Tipi / Kategori */}
+                      <tr className="hover:bg-slate-50/80 divide-x divide-slate-100">
+                        <td className="p-3 font-bold text-slate-700 bg-slate-50/50">
+                          🎯 1. Odak Tipi / Kategori
+                        </td>
+                        {specsList.map(({ raw, sanitized, specs }) => (
+                          <td key={raw.id} className="p-3 font-bold text-blue-900">
+                            {specs.isContact ? `Kontakt Lens (${sanitized.category})` : (
+                              sanitized.category === 'progressive' ? 'Çok Odaklı (Progresif)' :
+                              sanitized.category === 'office' ? 'Ofis / Dijital' :
+                              sanitized.category === 'bifocal' ? 'Bifokal' : 'Tek Odaklı (Single)'
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* 2. Kırılma İndeksi (İncelik) */}
+                      <tr className="hover:bg-slate-50/80 divide-x divide-slate-100">
+                        <td className="p-3 font-bold text-slate-700 bg-slate-50/50">
+                          💎 2. Kırılma İndeksi
+                        </td>
+                        {specsList.map(({ raw, specs }) => (
+                          <td key={raw.id} className="p-3">
+                            {specs.isContact ? (
+                              <span className="text-slate-400 italic text-[11px]">- (Kontakt Lens)</span>
+                            ) : (
+                              <span className="font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                                {specs.index} İndeks
+                              </span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* 3. Cam Tipi (Şeffaf / Fotokromik / Polarize) */}
+                      <tr className="hover:bg-slate-50/80 divide-x divide-slate-100">
+                        <td className="p-3 font-bold text-slate-700 bg-slate-50/50">
+                          ☀️ 3. Cam Tipi (Şeffaf / Fotokromik / Polarize)
+                        </td>
+                        {specsList.map(({ raw, sanitized, specs }) => (
+                          <td key={raw.id} className="p-3 font-bold">
+                            {specs.isContact ? (
+                              <span className="text-teal-800">Şeffaf / Renkli Lens</span>
+                            ) : sanitized.category === 'photochromic' ? (
+                              <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Fotokromik (Sensity / Transitions)</span>
+                            ) : sanitized.category === 'sun_polarized' ? (
+                              <span className="text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Polarize (Güneş)</span>
+                            ) : (
+                              <span className="text-slate-800 bg-slate-100 px-2 py-0.5 rounded">Şeffaf (Beyaz Cam)</span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* 4. Kaplama / Yüzey Teknolojisi */}
+                      <tr className="hover:bg-slate-50/80 divide-x divide-slate-100">
+                        <td className="p-3 font-bold text-slate-700 bg-slate-50/50">
+                          ✨ 4. Kaplama / Yüzey
+                        </td>
+                        {specsList.map(({ raw, sanitized, specs }) => (
+                          <td key={raw.id} className="p-3 font-bold text-slate-900">
+                            {sanitized.coating || (specs.isContact ? 'Özel Konfor Yüzeyi' : 'Standart AR')}
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* Temel Eğri (BC) - For contact lenses */}
                       <tr className="hover:bg-slate-50/80 divide-x divide-slate-100">
                         <td className="p-3 font-bold text-slate-700 bg-slate-50/50">
                           🎯 Temel Eğri (BC)
@@ -333,24 +399,6 @@ export const LensComparisonModal: React.FC<LensComparisonModalProps> = ({
                               </div>
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">- (Gözlük Camı)</span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-
-                      {/* Kırılma İndeksi (İncelik) */}
-                      <tr className="hover:bg-slate-50/80 divide-x divide-slate-100">
-                        <td className="p-3 font-bold text-slate-700 bg-slate-50/50">
-                          💎 Kırılma İndeksi
-                        </td>
-                        {specsList.map(({ raw, specs }) => (
-                          <td key={raw.id} className="p-3">
-                            {specs.isContact ? (
-                              <span className="text-slate-400 italic text-[11px]">-</span>
-                            ) : (
-                              <span className="font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                                {specs.index} İndeks
-                              </span>
                             )}
                           </td>
                         ))}

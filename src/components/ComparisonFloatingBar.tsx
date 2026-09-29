@@ -24,8 +24,8 @@ export const ComparisonFloatingBar: React.FC<ComparisonFloatingBarProps> = ({
   if (compareLenses.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[95%] max-w-3xl animate-in slide-in-from-bottom-5 duration-200">
-      <div className="bg-slate-900/95 backdrop-blur-md text-white p-2.5 sm:p-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center justify-between gap-3">
+    <div className="fixed bottom-3 left-2 right-2 sm:left-1/2 sm:-translate-x-1/2 z-40 w-auto sm:w-[95%] max-w-3xl animate-in slide-in-from-bottom-5 duration-200">
+      <div className="bg-slate-900/95 backdrop-blur-md text-white p-2 sm:p-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center justify-between gap-2 sm:gap-3">
         {/* Left: Count & Chips */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 py-0.5">
           <div className="flex items-center gap-1.5 bg-sky-500/20 text-sky-300 px-2.5 py-1 rounded-xl text-xs font-bold border border-sky-400/30 shrink-0">

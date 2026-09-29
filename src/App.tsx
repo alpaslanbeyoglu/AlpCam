@@ -104,7 +104,7 @@ export default function App() {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [catalogSection, setCatalogSection] = useState<'regular' | 'campaign'>('regular');
-  const [selectedProductType, setSelectedProductType] = useState<'all' | 'eyeglass_lens' | 'contact_lens' | 'solution'>('all');
+  const [selectedProductType, setSelectedProductType] = useState<'all' | 'eyeglass_lens' | 'contact_lens_and_solution' | 'contact_lens' | 'solution'>('all');
   const [selectedDistributor, setSelectedDistributor] = useState('all');
   const [selectedBrand, setSelectedBrand] = useState('all');
   const [selectedIndex, setSelectedIndex] = useState('all');
@@ -458,12 +458,16 @@ export default function App() {
         if (catalogSection === 'regular' && isCamp) return false;
         if (catalogSection === 'campaign' && !isCamp) return false;
 
-        // 0.5 Product Type (eyeglass_lens vs contact_lens vs solution)
+        // 0.5 Product Type (eyeglass_lens vs contact_lens_and_solution vs contact_lens vs solution)
         const isSol = isContactLensSolution(lens);
-        if (selectedProductType === 'eyeglass_lens' && (lens.productType === 'contact_lens' || isSol)) {
+        const isContact = lens.productType === 'contact_lens';
+        if (selectedProductType === 'eyeglass_lens' && (isContact || isSol)) {
           return false;
         }
-        if (selectedProductType === 'contact_lens' && (lens.productType !== 'contact_lens' || isSol)) {
+        if (selectedProductType === 'contact_lens_and_solution' && !isContact && !isSol) {
+          return false;
+        }
+        if (selectedProductType === 'contact_lens' && (!isContact || isSol)) {
           return false;
         }
         if (selectedProductType === 'solution' && !isSol) {
@@ -852,7 +856,7 @@ export default function App() {
                   />
                 ))}
                 {filteredLenses
-                  .filter((l) => l.productType === 'contact_lens')
+                  .filter((l) => l.productType === 'contact_lens' || isContactLensSolution(l))
                   .map((lens) => (
                     <ContactLensCard
                       key={lens.id}

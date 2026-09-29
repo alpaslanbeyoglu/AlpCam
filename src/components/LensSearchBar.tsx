@@ -9,8 +9,8 @@ interface LensSearchBarProps {
   setCatalogSection: (section: 'regular' | 'campaign') => void;
   regularCount: number;
   campaignCount: number;
-  selectedProductType: 'all' | 'eyeglass_lens' | 'contact_lens' | 'solution';
-  setSelectedProductType: (val: 'all' | 'eyeglass_lens' | 'contact_lens' | 'solution') => void;
+  selectedProductType: 'all' | 'eyeglass_lens' | 'contact_lens_and_solution' | 'contact_lens' | 'solution';
+  setSelectedProductType: (val: 'all' | 'eyeglass_lens' | 'contact_lens_and_solution' | 'contact_lens' | 'solution') => void;
   eyeglassCount: number;
   contactLensCount: number;
   solutionCount: number;
@@ -144,10 +144,8 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
   }, [confirmDeleteDist]);
 
   const activeCategories =
-    selectedProductType === 'contact_lens' 
-      ? CONTACT_LENS_CATEGORIES 
-      : selectedProductType === 'solution' 
-      ? SOLUTION_CATEGORIES 
+    selectedProductType === 'contact_lens_and_solution' || selectedProductType === 'contact_lens' || selectedProductType === 'solution'
+      ? [...CONTACT_LENS_CATEGORIES, ...SOLUTION_CATEGORIES.filter((s) => s.id !== 'all')] 
       : EYEGLASS_CATEGORIES;
 
   return (
@@ -159,16 +157,16 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
           <span className="text-sky-600 font-semibold lowercase">Toplam {totalMatches} ürün</span>
         </div>
         <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 shrink-0">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 shrink-0 w-full sm:w-auto">
             <button
               onClick={() => setSelectedProductType('eyeglass_lens')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
+              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 sm:gap-2 border ${
                 selectedProductType === 'eyeglass_lens'
                   ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                   : 'text-slate-600 border-transparent hover:bg-white/50 bg-white'
               }`}
             >
-              <Glasses className="w-4 h-4" />
+              <Glasses className="w-4 h-4 shrink-0" />
               <span>Gözlük Camları</span>
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedProductType === 'eyeglass_lens' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
                 {eyeglassCount}
@@ -176,32 +174,21 @@ export const LensSearchBar: React.FC<LensSearchBarProps> = ({
             </button>
 
             <button
-              onClick={() => setSelectedProductType('contact_lens')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
-                selectedProductType === 'contact_lens'
+              onClick={() => setSelectedProductType('contact_lens_and_solution')}
+              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 sm:gap-2 border ${
+                selectedProductType === 'contact_lens_and_solution' || selectedProductType === 'contact_lens' || selectedProductType === 'solution'
                   ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
                   : 'text-slate-600 border-transparent hover:bg-white/50 bg-white'
               }`}
             >
-              <Eye className="w-4 h-4" />
-              <span>Kontakt Lens</span>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedProductType === 'contact_lens' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                {contactLensCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setSelectedProductType('solution')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
-                selectedProductType === 'solution'
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                  : 'text-slate-600 border-transparent hover:bg-white/50 bg-white'
-              }`}
-            >
-              <Droplet className="w-4 h-4" />
-              <span>Solüsyonlar</span>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedProductType === 'solution' ? 'bg-purple-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                {solutionCount}
+              <Eye className="w-4 h-4 shrink-0 text-amber-300 sm:text-white" />
+              <span>Kontakt Lens & Solüsyon</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                selectedProductType === 'contact_lens_and_solution' || selectedProductType === 'contact_lens' || selectedProductType === 'solution' 
+                  ? 'bg-teal-700 text-white' 
+                  : 'bg-slate-200 text-slate-600'
+              }`}>
+                {contactLensCount + solutionCount}
               </span>
             </button>
           </div>

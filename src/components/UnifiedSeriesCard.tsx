@@ -228,46 +228,26 @@ export const UnifiedSeriesCard: React.FC<UnifiedSeriesCardProps> = ({
           </p>
         </div>
 
-        {/* INTERACTIVE SELECTORS */}
+        {/* INTERACTIVE SELECTORS (Strict Hierarchy: Odak -> İndeks -> Şeffaf/Fotokromik/Polarize -> Kaplama) */}
         <div className="space-y-2.5 pt-1 border-t border-slate-100 text-xs">
-          {/* 1. Segment Selector (Beyaz, Sensity 1, Sensity 2, Polarize) if multiple segments exist */}
-          {segments.length > 1 && (
-            <div>
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
-                Kategori / Teknoloji:
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {segments.map((seg) => {
-                  const label = 
-                    seg === 'sensity2' ? 'Sensity 2 (Fotokromik)' :
-                    seg === 'sensity1' ? 'Sensity (Fotokromik)' :
-                    seg === 'polarized' ? 'Polarize (Güneş)' : 'Beyaz / Şeffaf';
-                  return (
-                    <button
-                      key={seg}
-                      onClick={() => setSelectedSegment(seg)}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
-                        selectedSegment === seg
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* 1. Odak Tipi (Focus Badge Header) */}
+          <div className="flex items-center justify-between bg-slate-50 p-1.5 rounded-lg border border-slate-200/80 text-[11px]">
+            <span className="font-extrabold text-slate-500 uppercase text-[10px]">1. Odak Tipi:</span>
+            <span className="font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+              {activeLens.category === 'progressive' ? 'Çok Odaklı (Progresif)' :
+               activeLens.category === 'office' ? 'Ofis / Dijital Odaklı' :
+               activeLens.category === 'bifocal' ? 'Bifokal Odaklı' : 'Tek Odaklı (Single Vision)'}
+            </span>
+          </div>
 
           {/* 2. Index Selector */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                İndeks / Kalınlık:
+                2. İndeks / Kalınlık:
               </span>
               <span className="text-[11px] font-mono font-bold text-amber-700">
-                {selectedIndex}
+                {selectedIndex} İndeks
               </span>
             </div>
             <div className="flex flex-wrap gap-1">
@@ -287,11 +267,41 @@ export const UnifiedSeriesCard: React.FC<UnifiedSeriesCardProps> = ({
             </div>
           </div>
 
-          {/* 3. Coating Selector */}
+          {/* 3. Şeffaf - Fotokromik - Polarize Selector */}
+          {segments.length > 1 && (
+            <div>
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
+                3. Cam Tipi (Şeffaf / Fotokromik / Polarize):
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {segments.map((seg) => {
+                  const label = 
+                    seg === 'sensity2' ? 'Sensity 2 (Fotokromik)' :
+                    seg === 'sensity1' ? 'Fotokromik (Sensity)' :
+                    seg === 'polarized' ? 'Polarize (Güneş)' : 'Şeffaf (Beyaz)';
+                  return (
+                    <button
+                      key={seg}
+                      onClick={() => setSelectedSegment(seg)}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
+                        selectedSegment === seg
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 4. Coating Selector */}
           {availableCoatings.length > 0 && (
             <div>
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
-                Kaplama / Teknoloji:
+                4. Kaplama / Yüzey Teknolojisi:
               </span>
               <div className="flex flex-wrap gap-1">
                 {availableCoatings.map((coating) => (

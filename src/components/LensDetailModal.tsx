@@ -848,16 +848,31 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                       ) : (
                         <>
                           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Kırılma İndeksi</span>
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">1. Odak Tipi / Kategori</span>
+                            <span className="font-bold text-blue-800">
+                              {lens.category === 'progressive' ? 'Çok Odaklı (Progresif)' :
+                               lens.category === 'office' ? 'Ofis / Dijital' :
+                               lens.category === 'bifocal' ? 'Bifokal' : 'Tek Odaklı (Single)'}
+                            </span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">2. Kırılma İndeksi</span>
                             <span className="font-bold text-slate-900">{specs.index} İndeks</span>
                           </div>
                           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Abbe Değeri (Netlik)</span>
-                            <span className="font-bold text-sky-800">{specs.abbeValue} Abbe</span>
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">3. Cam Tipi (Işık Tipi)</span>
+                            <span className="font-bold text-amber-800">
+                              {lens.category === 'photochromic' ? 'Fotokromik (Sensity / Transitions)' :
+                               lens.category === 'sun_polarized' ? 'Polarize (Güneş)' : 'Şeffaf (Beyaz Cam)'}
+                            </span>
                           </div>
                           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Yoğunluk</span>
-                            <span className="font-bold text-slate-800">{specs.density}</span>
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">4. Kaplama / Yüzey</span>
+                            <span className="font-bold text-sky-800 truncate block" title={lens.coating}>{lens.coating || 'Standart AR'}</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Abbe Değeri (Netlik)</span>
+                            <span className="font-bold text-slate-800">{specs.abbeValue} Abbe</span>
                           </div>
                           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                             <span className="text-slate-400 block text-[10px] font-semibold uppercase">Hammadde Materyali</span>
@@ -876,10 +891,6 @@ export const LensDetailModal: React.FC<LensDetailModalProps> = ({
                           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 sm:col-span-2">
                             <span className="text-slate-400 block text-[10px] font-semibold uppercase">Diyoptri Sferik / Silindirik Limit</span>
                             <span className="font-bold text-slate-900">SPH: {specs.sphRangeText} | CYL: ±{lens.cylMax ?? 2.00} Dpt</span>
-                          </div>
-                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Çerçeve Uyumu</span>
-                            <span className="font-semibold text-slate-700 text-[10px]">{specs.frameCompatibility}</span>
                           </div>
                         </>
                       )}

@@ -289,6 +289,24 @@ export function sanitizeLens(lens: Lens): Lens {
     finalCurrency = 'EUR';
   }
 
+  let name = lens.name || '';
+  let coating = lens.coating || '';
+
+  // Clean erroneous "LayR" / "Hi-Vision LayR" OCR artifacts for HOYA and other lenses
+  if (/layr/i.test(name) || /layr/i.test(coating)) {
+    if (/SHV/i.test(name) || /SHV/i.test(coating)) {
+      coating = coating.replace(/Hi-Vision\s*LayR|Solitaire\s*LayR|LayR\s*\(SHV\)|LayR/gi, 'Super Hi-Vision (SHV)').trim();
+      name = name.replace(/Hi-Vision\s*LayR|Solitaire\s*LayR|LayR\s*\(SHV\)|LayR/gi, 'Super Hi-Vision').trim();
+    } else {
+      coating = coating.replace(/Hi-Vision\s*LayR|Solitaire\s*LayR|LayR\s*\(HVLL\)|LayR/gi, 'Hi-Vision LongLife (HVLL)').trim();
+      name = name.replace(/Hi-Vision\s*LayR|Solitaire\s*LayR|LayR\s*\(HVLL\)|LayR/gi, 'Hi-Vision LongLife').trim();
+    }
+  }
+
+  // Double space cleanup
+  name = name.replace(/\s+/g, ' ').trim();
+  coating = coating.replace(/\s+/g, ' ').trim();
+
   let wPrice = lens.wholesalePrice;
   let rPrice = lens.retailPrice;
 
@@ -302,6 +320,8 @@ export function sanitizeLens(lens: Lens): Lens {
 
   return {
     ...lens,
+    name: name || lens.name,
+    coating: coating || lens.coating,
     brand: normBrand || lens.brand,
     distributor: finalDistributor,
     productType: isContact ? 'contact_lens' : 'eyeglass_lens',
