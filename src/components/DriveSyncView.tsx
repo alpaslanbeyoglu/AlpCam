@@ -86,6 +86,13 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   const [fileSearchTerm, setFileSearchTerm] = useState('');
   const [fileTypeTab, setFileTypeTab] = useState<'all' | 'eyeglass' | 'contact' | 'toptan' | 'kampanyalar' | 'karisik'>('all');
 
+  // Multi-selection and Single List Import Modal state
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [selectedFileForModal, setSelectedFileForModal] = useState<DriveFolderFileInfo | null>(null);
+  const [modalImportMode, setModalImportMode] = useState<'replace_brand' | 'merge' | 'replace_all'>('replace_brand');
+  const [directLinkInput, setDirectLinkInput] = useState<string>('');
+  const [isDirectLinkScanning, setIsDirectLinkScanning] = useState<boolean>(false);
+
   // Admin Price Mode & Product Type decision state
   const [adminPriceMode, setAdminPriceMode] = useState<'auto' | 'wholesale' | 'retail' | 'karisik'>('auto');
   const [profitMarkup, setProfitMarkup] = useState<number>(2.0);
@@ -585,6 +592,242 @@ JSON ŞEMASI:
     });
   };
 
+  // Handle selection toggling
+  const handleToggleSelectFile = (fileId: string) => {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllFiltered = () => {
+    if (selectedFileIds.size === filteredFiles.length) {
+      setSelectedFileIds(new Set());
+    } else {
+      setSelectedFileIds(new Set(filteredFiles.map((f) => f.id)));
+    }
+  };
+
+  // Handle Dedicated Single File Import with Mode Decision (replace_brand, merge, replace_all)
+  const handleExecuteImportSingleFile = async (
+    file: DriveFolderFileInfo,
+    mode: 'replace_brand' | 'merge' | 'replace_all' = modalImportMode
+  ) => {
+    setSelectedFileForModal(null);
+    setScanningFileId(file.id);
+
+    const isContact = file.productType === 'contact_lens' || isContactLens(file.name);
+    const effectiveFileMarkup =
+      file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
+
+    const effectivePriceMode =
+      adminPriceMode !== 'auto'
+        ? adminPriceMode
+        : file.listType === 'toptan'
+        ? 'wholesale'
+        : file.listType === 'perakende'
+        ? 'retail'
+        : file.listType === 'karisik'
+        ? 'karisik'
+        : 'auto';
+
+    setStatusMessage({
+      type: 'info',
+      message: `"${file.name}" listesi Google Drive'dan taranıyor ve sisteme dahil ediliyor...`,
+    });
+
+    try {
+      const res = await scanSingleDriveFile(file, {
+        priceMode: effectivePriceMode,
+        profitMarkup: effectivePriceMode === 'retail' ? 1.0 : effectiveFileMarkup,
+        productTypeHint: isContact ? 'contact_lens' : 'eyeglass_lens',
+      });
+
+      if (res.success && res.lenses.length > 0) {
+        if (mode === 'replace_brand') {
+          // Clean existing lenses for this brand and insert the new list
+          const brandLower = file.brand.trim().toLowerCase();
+          const remainingLenses = lenses.filter(
+            (l) => l.brand.trim().toLowerCase() !== brandLower
+          );
+          onUpdateLenses([...remainingLenses, ...res.lenses], 'replace');
+          setStatusMessage({
+            type: 'success',
+            message: `"${file.brand}" markasının eski listesi silindi ve Drive'daki güncel listeden ${res.lenses.length} adet yeni ürün başarıyla sisteme yüklendi!`,
+          });
+        } else if (mode === 'replace_all') {
+          onUpdateLenses(res.lenses, 'replace');
+          setStatusMessage({
+            type: 'success',
+            message: `Tüm katalog sıfırlandı ve sadece "${file.name}" dosyasından ${res.lenses.length} ürün yüklendi!`,
+          });
+        } else {
+          // Merge mode
+          onUpdateLenses(res.lenses, 'merge');
+          setStatusMessage({
+            type: 'success',
+            message: `"${file.name}" dosyasından ${res.lenses.length} ürün mevcut kataloğunuza başarıyla eklendi!`,
+          });
+        }
+
+        // Update local file status
+        setDriveFiles((prev) =>
+          prev.map((f) =>
+            f.id === file.id
+              ? { ...f, status: 'completed', extractedCount: res.lenses.length }
+              : f
+          )
+        );
+      } else {
+        setStatusMessage({
+          type: 'error',
+          message: res.error || 'Dosyadan ürün bilgileri okunamadı.',
+        });
+      }
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        message: `İçe aktarma hatası: ${err.message || 'Bilinmeyen hata'}`,
+      });
+    } finally {
+      setScanningFileId(null);
+    }
+  };
+
+  // Handle Scanning Selected Multiple Files
+  const handleBatchScanSelected = async () => {
+    const targetFiles = driveFiles.filter((f) => selectedFileIds.has(f.id));
+    if (targetFiles.length === 0) return;
+
+    setSubTab('scanning');
+    setIsBatchScanning(true);
+    setStatusMessage({
+      type: 'info',
+      message: `Seçilen ${targetFiles.length} liste taranıyor ve sisteme dahil ediliyor...`,
+    });
+
+    for (let i = 0; i < targetFiles.length; i++) {
+      const file = targetFiles[i];
+      const effectiveFileMarkup =
+        file.profitMarkup !== undefined && file.profitMarkup > 0 ? file.profitMarkup : profitMarkup;
+      setBatchProgress({
+        current: i + 1,
+        total: targetFiles.length,
+        filename: file.name,
+      });
+
+      const effectivePriceMode =
+        adminPriceMode !== 'auto'
+          ? adminPriceMode
+          : file.listType === 'toptan'
+          ? 'wholesale'
+          : file.listType === 'perakende'
+          ? 'retail'
+          : 'auto';
+
+      try {
+        const res = await scanSingleDriveFile(file, {
+          priceMode: effectivePriceMode,
+          profitMarkup: effectivePriceMode === 'retail' ? 1.0 : effectiveFileMarkup,
+          productTypeHint: productTypeHint,
+        });
+
+        if (res.success && res.lenses.length > 0) {
+          onUpdateLenses(res.lenses, 'merge');
+          setDriveFiles((prev) =>
+            prev.map((f) =>
+              f.id === file.id
+                ? { ...f, status: 'completed', extractedCount: res.lenses.length }
+                : f
+            )
+          );
+        }
+      } catch (err) {
+        console.error(`Error scanning selected file ${file.name}:`, err);
+      }
+    }
+
+    setIsBatchScanning(false);
+    setSelectedFileIds(new Set());
+    setStatusMessage({
+      type: 'success',
+      message: `Seçilen ${targetFiles.length} listenin tümü başarıyla taranarak kataloğunuza dahil edildi!`,
+    });
+  };
+
+  // Direct Drive URL / Share Link Import
+  const handleDirectLinkScan = async () => {
+    if (!directLinkInput.trim()) return;
+
+    setIsDirectLinkScanning(true);
+    setStatusMessage({
+      type: 'info',
+      message: 'Belirtilen bağlantı taranıyor ve ürünler ayrıştırılıyor...',
+    });
+
+    try {
+      const url = directLinkInput.trim();
+      const isSheetOrCsv = url.includes('spreadsheets') || url.endsWith('.csv') || url.endsWith('.xlsx');
+
+      if (isSheetOrCsv) {
+        const buffer = await fetchFromDriveUrl(url);
+        const res = parseExcelOrCsvData(buffer);
+        if (res.success && res.lenses.length > 0) {
+          onUpdateLenses(res.lenses, 'merge');
+          setStatusMessage({
+            type: 'success',
+            message: `E-Tablo/Excel linkinden ${res.lenses.length} ürün başarıyla sisteme aktarıldı!`,
+          });
+          setDirectLinkInput('');
+        } else {
+          throw new Error('Dosyada geçerli ürün satırı bulunamadı.');
+        }
+      } else {
+        // Assume document/PDF link or drive file
+        const syntheticFile: DriveFolderFileInfo = {
+          id: `direct-${Date.now()}`,
+          name: 'Bağlantıdan İçe Aktarılan Liste',
+          brand: 'Genel',
+          format: 'pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 0,
+          driveViewUrl: url,
+          driveDownloadUrl: url,
+          status: 'idle',
+        };
+
+        const res = await scanSingleDriveFile(syntheticFile, {
+          priceMode: adminPriceMode,
+          profitMarkup,
+          productTypeHint,
+        });
+
+        if (res.success && res.lenses.length > 0) {
+          onUpdateLenses(res.lenses, 'merge');
+          setStatusMessage({
+            type: 'success',
+            message: `Bağlantıdaki belgeden ${res.lenses.length} ürün başarıyla taranarak sisteme eklendi!`,
+          });
+          setDirectLinkInput('');
+        } else {
+          throw new Error(res.error || 'Belgeden ürün okunamadı.');
+        }
+      }
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        message: `Bağlantı taranamadı: ${err.message || 'Lütfen linkin herkese açık paylaşıldığından emin olun.'}`,
+      });
+    } finally {
+      setIsDirectLinkScanning(false);
+    }
+  };
+
   // Apply previewed lenses to actual catalog
   const handleApplyPreviewLenses = (mode: 'merge' | 'replace') => {
     if (!previewLenses || previewLenses.length === 0) return;
@@ -841,6 +1084,37 @@ JSON ŞEMASI:
         {/* DRIVE CONTENT TABS */}
         {subTab === 'files' && (
           <>
+            {/* Direct Drive Link / Single File URL Input Bar */}
+            <div className="p-3.5 sm:p-4 bg-sky-50/80 border-b border-sky-100 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
+              <div className="flex-1 space-y-1">
+                <span className="font-bold text-sky-950 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Google Drive'dan Yenilenen Tekil Liste / E-Tablo Linki Yapıştır:</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={directLinkInput}
+                    onChange={(e) => setDirectLinkInput(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/... veya https://docs.google.com/spreadsheets/d/..."
+                    className="w-full px-3 py-2 bg-white border border-sky-200 rounded-lg text-slate-800 text-xs font-mono focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleDirectLinkScan}
+                    disabled={isDirectLinkScanning || !directLinkInput.trim()}
+                    className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-bold text-xs transition shadow-xs flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                  >
+                    {isDirectLinkScanning ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isDirectLinkScanning ? 'İşleniyor...' : 'Sisteme Dahil Et'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Drive Folder Connection Bar */}
             <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs">
               <div className="flex-1 w-full space-y-1">
@@ -1786,6 +2060,36 @@ JSON ŞEMASI:
           </div>
         </div>
 
+        {/* Multi-Selection Sticky Action Bar (When 1 or more files are selected) */}
+        {selectedFileIds.size > 0 && (
+          <div className="bg-sky-900 text-white p-3 rounded-2xl shadow-lg border border-sky-700 flex flex-wrap items-center justify-between gap-3 animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-sky-500 text-white font-black text-xs flex items-center justify-center">
+                {selectedFileIds.size}
+              </span>
+              <span className="font-bold text-xs">
+                {selectedFileIds.size} adet liste seçildi
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedFileIds(new Set())}
+                className="px-3 py-1.5 bg-sky-800 hover:bg-sky-700 text-slate-200 rounded-lg text-xs font-semibold transition"
+              >
+                Seçimi İptal Et
+              </button>
+              <button
+                onClick={handleBatchScanSelected}
+                disabled={isBatchScanning}
+                className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-black shadow-sm transition flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Seçilenleri Sisteme Dahil Et</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Files Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredFiles.map((file) => {
@@ -1793,15 +2097,25 @@ JSON ŞEMASI:
             const isContact = file.category === 'contact_lens' || file.name.toLowerCase().includes('lens');
             const fileDist = file.distributor || getDistributorForBrand(file.brand, file.name);
             const distInfo = fileDist ? getDistributorInfo(fileDist) : undefined;
+            const isSelected = selectedFileIds.has(file.id);
 
             return (
               <div
                 key={file.id}
-                className="p-3.5 bg-slate-50/70 hover:bg-slate-50 border border-slate-200/80 rounded-xl transition flex flex-col justify-between gap-3 group"
+                className={`p-3.5 bg-slate-50/70 hover:bg-slate-50 border rounded-xl transition flex flex-col justify-between gap-3 group relative ${
+                  isSelected ? 'border-sky-500 bg-sky-50/40 ring-2 ring-sky-400/30' : 'border-slate-200/80'
+                }`}
               >
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelectFile(file.id)}
+                        className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer"
+                        title="Toplu işlem için seç"
+                      />
                       <div
                         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                           file.format === 'pdf'
@@ -2059,41 +2373,34 @@ JSON ŞEMASI:
 
                 {/* Card Actions */}
                 <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-slate-500">
-                    {file.format === 'pdf' ? 'PDF Belgesi' : 'Görsel (JPG)'}
-                  </span>
+                  <button
+                    onClick={() => setActiveFlipbookFile(file)}
+                    className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-1"
+                    title="Orijinal PDF Belgesini İncele"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                    <span>İncele</span>
+                  </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => setActiveFlipbookFile(file)}
-                      className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition flex items-center gap-1.5"
+                      onClick={() => setSelectedFileForModal(file)}
+                      disabled={isScanningThis || isBatchScanning}
+                      className="px-3 py-1.5 text-[11px] font-extrabold bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white rounded-lg transition shadow-xs flex items-center gap-1.5"
+                      title="Bu listeyi seçin ve sisteme dahil etme seçeneklerini belirleyin"
                     >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>İncele</span>
+                      {isScanningThis ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
+                          <span>Dahil Ediliyor...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Sisteme Dahil Et</span>
+                        </>
+                      )}
                     </button>
-                    {isAdmin ? (
-                      <button
-                        onClick={() => handleScanSingleFile(file)}
-                        disabled={isScanningThis || isBatchScanning}
-                        className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 hover:border-sky-300 rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
-                      >
-                        {isScanningThis ? (
-                          <>
-                            <RefreshCw className="w-3 h-3 animate-spin text-sky-600" />
-                            <span>Taranıyor...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-3 h-3 text-sky-500" />
-                            <span>AI ile Tara</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                        Entegre Edildi
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -2102,6 +2409,127 @@ JSON ŞEMASI:
         </div>
       </div>
     )}
+
+      {/* SINGLE RENEWED LIST IMPORT MODAL (Interactive Choice Dialog) */}
+      {selectedFileForModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 space-y-4">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-indigo-950 p-5 text-white flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black uppercase">
+                  Drive'dan Liste Dahil Et
+                </span>
+                <h3 className="text-base font-bold tracking-tight">
+                  {selectedFileForModal.brand} Fiyat Listesi
+                </h3>
+                <p className="text-xs text-slate-300 line-clamp-1">
+                  Dosya: {selectedFileForModal.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedFileForModal(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-extrabold text-slate-800 block text-xs uppercase tracking-wider">
+                  1. İçe Aktarma ve Yenileme Modunu Seçin:
+                </label>
+                <div className="space-y-2">
+                  {/* Option 1: Replace Brand */}
+                  <div
+                    onClick={() => setModalImportMode('replace_brand')}
+                    className={`p-3 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3 ${
+                      modalImportMode === 'replace_brand'
+                        ? 'bg-sky-50/80 border-sky-600 text-sky-950'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="p-1.5 rounded-xl bg-sky-600 text-white mt-0.5">
+                      <RefreshCw className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-0.5 flex-1">
+                      <div className="font-bold text-sm">
+                        🔄 Sadece Bu Markanın Camlarını Yenile (Önerilen)
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Kataloğunuzdaki eski <strong>{selectedFileForModal.brand}</strong> camları silinir ve yerine bu yeni listedeki güncel fiyatlar yüklenir. Diğer markalarınıza dokunulmaz.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Merge */}
+                  <div
+                    onClick={() => setModalImportMode('merge')}
+                    className={`p-3 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3 ${
+                      modalImportMode === 'merge'
+                        ? 'bg-sky-50/80 border-sky-600 text-sky-950'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="p-1.5 rounded-xl bg-emerald-600 text-white mt-0.5">
+                      <Plus className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-0.5 flex-1">
+                      <div className="font-bold text-sm">
+                        ➕ Mevcut Kataloğa İlave Et (Birleştir / Merge)
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Mevcut camlarınızın hiçbiri silinmez; yeni listedeki camlar kataloğa eklenir.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Option 3: Replace All */}
+                  <div
+                    onClick={() => setModalImportMode('replace_all')}
+                    className={`p-3 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3 ${
+                      modalImportMode === 'replace_all'
+                        ? 'bg-rose-50/80 border-rose-600 text-rose-950'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="p-1.5 rounded-xl bg-rose-600 text-white mt-0.5">
+                      <Check className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-0.5 flex-1">
+                      <div className="font-bold text-sm text-rose-900">
+                        ⚠️ Tüm Kataloğu Sıfırla ve Sadece Bunu Yükle
+                      </div>
+                      <p className="text-[11px] text-rose-700">
+                        Diğer tüm cam listeleri temizlenir, sistem sadece bu yeni liste ile sıfırdan başlar.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setSelectedFileForModal(null)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-xl text-xs font-semibold transition"
+              >
+                Vazgeç
+              </button>
+              <button
+                onClick={() => handleExecuteImportSingleFile(selectedFileForModal, modalImportMode)}
+                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-black text-xs rounded-xl shadow-md transition flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Bu Listeyi Sisteme Dahil Et</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ADDITIONAL ADMIN TOOLS: EXCEL & CATALOG MANAGEMENT */}
       {subTab === 'files' && isAdmin && (
