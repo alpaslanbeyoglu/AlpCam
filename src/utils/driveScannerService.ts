@@ -23,21 +23,21 @@ export async function fetchDriveFiles(folderUrl: string = KNOWN_DRIVE_FOLDER_URL
       throw new Error(`Sunucu yanıt vermedi: HTTP ${res.status}`);
     }
     const data = await res.json();
-    if (data.success && Array.isArray(data.files) && data.files.length > 0) {
+    if (data.success && Array.isArray(data.files)) {
       return data.files;
     }
   } catch (err) {
-    console.warn('Backend Drive files endpoint failed, falling back to verified known files:', err);
+    console.warn('Backend Drive files endpoint failed:', err);
+    throw err;
   }
-  // Fallback to verified known files from the same URL
-  return KNOWN_DRIVE_FILES;
+  throw new Error('Google Drive klasör dosyaları alınamadı.');
 }
 
 export async function scanSingleDriveFile(
   file: DriveFolderFileInfo,
   options?: ScanOptions,
   retryCount: number = 1
-): Promise<{ success: boolean; lenses: Lens[]; error?: string }> {
+): Promise<{ success: boolean; lenses: Lens[]; error?: string; isDeleted?: boolean }> {
   let timeoutId: any = null;
   try {
     const controller = new AbortController();
@@ -61,13 +61,17 @@ export async function scanSingleDriveFile(
     if (!res.ok) {
       const errorText = await res.text();
       let errorMsg = `HTTP ${res.status}`;
+      let isDeleted = false;
       try {
         const json = JSON.parse(errorText);
         if (json.error) errorMsg = json.error;
+        if (json.isDeleted) isDeleted = true;
       } catch (_) {
         if (errorText) errorMsg = errorText;
       }
-      throw new Error(errorMsg);
+      const errObj = new Error(errorMsg) as any;
+      errObj.isDeleted = isDeleted;
+      throw errObj;
     }
 
     const data = await res.json();
@@ -76,6 +80,16 @@ export async function scanSingleDriveFile(
     }
     throw new Error(data.error || 'Ürün listesi ayrıştırılamadı.');
   } catch (err: any) {
+    if (err.isDeleted) {
+      console.error(`[DriveScanner] File deleted or private on Google Drive: ${file.name}`);
+      return {
+        success: false,
+        lenses: [],
+        error: err.message || 'Dosya silinmiş veya erişilemez.',
+        isDeleted: true
+      };
+    }
+
     if (retryCount > 0 && err.name !== 'AbortError' && !err.message?.toLowerCase().includes('aborted')) {
       console.warn(`Retrying scan for ${file.name} after error: ${err.message}`);
       await new Promise((r) => setTimeout(r, 2000));

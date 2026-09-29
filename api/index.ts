@@ -766,6 +766,16 @@ async function fetchWithTimeout(url: string, options: any = {}, timeoutMs = 5000
 async function downloadDriveFileBuffer(fileId: string, fileName?: string, mimeType?: string): Promise<Buffer> {
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   
+  if (fileId.startsWith('http://') || fileId.startsWith('https://')) {
+    console.log(`[Drive Download] Direct URL download detected: ${fileId}`);
+    const res = await fetchWithTimeout(fileId, { headers: { 'User-Agent': userAgent } }, 15000);
+    if (!res.ok) {
+      throw new Error(`Direct download failed: HTTP ${res.status}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+  
   // 1. Try to load the standard, fully authorized Google Cloud Developer API key from firebase-applet-config.json
   let googleApiKey = '';
   try {
@@ -1161,8 +1171,18 @@ app.post('/api/drive/scan-file', async (req, res) => {
     // We used to bypass these to avoid timeouts, but now we allow AI scanning with optimized settings.
     // We only use the fallback if the file is extremely massive or if the AI scan fails.
     
-    console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId}) with priceMode: ${priceMode}...`);
-    const buffer = await downloadDriveFileBuffer(fileId, fileName, mimeType);
+    let buffer: Buffer;
+    try {
+      console.log(`[Drive Scanner] Downloading file: ${fileName} (${fileId}) with priceMode: ${priceMode}...`);
+      buffer = await downloadDriveFileBuffer(fileId, fileName, mimeType);
+    } catch (downloadErr: any) {
+      console.error('[Drive Scanner] Download failed:', downloadErr);
+      return res.status(404).json({
+        success: false,
+        error: `Dosya indirilemedi veya silinmiş. Lütfen Google Drive'da mevcut olduğundan emin olun. (Detay: ${downloadErr.message || 'Bağlantı hatası'})`,
+        isDeleted: true
+      });
+    }
     console.log(`[Drive Scanner] Downloaded ${fileName} (${buffer.byteLength} bytes). Processing with Gemini...`);
 
     // Guard against files exceeding Gemini inlineData 15MB safe threshold

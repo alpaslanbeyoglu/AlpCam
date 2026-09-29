@@ -14,6 +14,7 @@ import {
 import {
   downloadSampleExcelTemplate,
   exportLensesToExcel,
+  fetchFromDriveUrl,
   parseExcelOrCsvData,
 } from '../utils/driveSync';
 import { isContactLens } from '../utils/pricing';
@@ -78,7 +79,42 @@ export const DriveSyncView: React.FC<DriveSyncViewProps> = ({
   // Folder & File state
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [folderUrl, setFolderUrl] = useState<string>(config.sourceUrl || KNOWN_DRIVE_FOLDER_URL);
-  const [driveFiles, setDriveFiles] = useState<DriveFolderFileInfo[]>(KNOWN_DRIVE_FILES);
+  const [driveFiles, setDriveFiles] = useState<DriveFolderFileInfo[]>(() => {
+    try {
+      const cached = localStorage.getItem('optik_drive_files_list_v1');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length >= 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load cached drive files:', e);
+    }
+    return KNOWN_DRIVE_FILES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('optik_drive_files_list_v1', JSON.stringify(driveFiles));
+    } catch (e) {
+      console.error('Failed to save drive files to localStorage:', e);
+    }
+  }, [driveFiles]);
+
+  const handleRemoveFileFromList = (fileId: string) => {
+    setDriveFiles((prev) => prev.filter((f) => f.id !== fileId));
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      next.delete(fileId);
+      return next;
+    });
+    setStatusMessage({
+      type: 'success',
+      message: 'Dosya listeden kaldırıldı. Bir sonraki taramada veya güncellemede göz ardı edilecektir.',
+    });
+  };
+
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [fileFilterBrand, setFileFilterBrand] = useState<string>('all');
   const [fileFilterDistributor, setFileFilterDistributor] = useState<string>('all');
@@ -314,10 +350,17 @@ JSON ŞEMASI:
     let isMounted = true;
     async function load() {
       setIsLoadingFiles(true);
-      const files = await fetchDriveFiles(folderUrl);
-      if (isMounted) {
-        setDriveFiles(files);
-        setIsLoadingFiles(false);
+      try {
+        const files = await fetchDriveFiles(folderUrl);
+        if (isMounted && files && files.length > 0) {
+          setDriveFiles(files);
+        }
+      } catch (err) {
+        console.warn('Could not refresh drive files on mount, keeping current/cached list of files:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingFiles(false);
+        }
       }
     }
     load();
@@ -516,10 +559,18 @@ JSON ŞEMASI:
         prev.map((f) => (f.id === file.id ? { ...f, status: 'completed', extractedCount: res.lenses.length } : f))
       );
     } else {
-      setStatusMessage({
-        type: 'error',
-        message: res.error || 'Dosya taranırken bir hata oluştu veya ürün bulunamadı.',
-      });
+      if ((res as any).isDeleted) {
+        setStatusMessage({
+          type: 'error',
+          message: `"${file.name}" dosyası Google Drive'dan silindiği veya erişilemez olduğu için listeden kaldırıldı.`,
+        });
+        handleRemoveFileFromList(file.id);
+      } else {
+        setStatusMessage({
+          type: 'error',
+          message: res.error || 'Dosya taranırken bir hata oluştu veya ürün bulunamadı.',
+        });
+      }
     }
   };
 
@@ -573,9 +624,14 @@ JSON ŞEMASI:
           );
         } else if (!res.success) {
           console.error(`Error scanning ${file.name}:`, res.error);
-          setDriveFiles((prev) =>
-            prev.map((f) => (f.id === file.id ? { ...f, status: 'error', errorMessage: res.error } : f))
-          );
+          if ((res as any).isDeleted) {
+            console.log(`Auto-removing deleted file from list during batch scan: ${file.name}`);
+            handleRemoveFileFromList(file.id);
+          } else {
+            setDriveFiles((prev) =>
+              prev.map((f) => (f.id === file.id ? { ...f, status: 'error', errorMessage: res.error } : f))
+            );
+          }
         }
       } catch (err: any) {
         console.error(`Fatal error scanning ${file.name}:`, err);
@@ -684,10 +740,18 @@ JSON ŞEMASI:
           )
         );
       } else {
-        setStatusMessage({
-          type: 'error',
-          message: res.error || 'Dosyadan ürün bilgileri okunamadı.',
-        });
+        if ((res as any).isDeleted) {
+          setStatusMessage({
+            type: 'error',
+            message: `"${file.name}" dosyası Google Drive'dan silindiği veya erişilemez olduğu için listeden kaldırıldı.`,
+          });
+          handleRemoveFileFromList(file.id);
+        } else {
+          setStatusMessage({
+            type: 'error',
+            message: res.error || 'Dosyadan ürün bilgileri okunamadı.',
+          });
+        }
       }
     } catch (err: any) {
       setStatusMessage({
@@ -746,6 +810,9 @@ JSON ŞEMASI:
                 : f
             )
           );
+        } else if (!(res as any).success && (res as any).isDeleted) {
+          console.log(`Auto-removing deleted file from list during batch selected scan: ${file.name}`);
+          handleRemoveFileFromList(file.id);
         }
       } catch (err) {
         console.error(`Error scanning selected file ${file.name}:`, err);
@@ -789,16 +856,20 @@ JSON ŞEMASI:
         }
       } else {
         // Assume document/PDF link or drive file
+        // Extract real Google Drive ID if it is a Drive link, otherwise pass the full URL
+        const driveFileMatch = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || url.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+        const extractedId = driveFileMatch && driveFileMatch[1] ? driveFileMatch[1] : url;
+
         const syntheticFile: DriveFolderFileInfo = {
-          id: `direct-${Date.now()}`,
+          id: extractedId,
           name: 'Bağlantıdan İçe Aktarılan Liste',
           brand: 'Genel',
           format: 'pdf',
           mimeType: 'application/pdf',
-          sizeBytes: 0,
+          listType: 'genel',
           driveViewUrl: url,
-          driveDownloadUrl: url,
-          status: 'idle',
+          downloadUrl: url,
+          status: 'pending',
         };
 
         const res = await scanSingleDriveFile(syntheticFile, {
